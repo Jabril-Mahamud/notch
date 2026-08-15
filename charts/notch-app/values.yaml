@@ -1,0 +1,14 @@
+service:
+  name: ""
+  ports: []
+  deployment:
+    replicas: 1
+    env: {}
+    containers:
+      app:
+        image:
+          ref: ""
+          pullPolicy: IfNotPresent
+        resources: {}
+        livenessProbe: {}
+        readinessProbe: {}
