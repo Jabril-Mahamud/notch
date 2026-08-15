@@ -8,6 +8,13 @@ metadata:
 
 iam:
   withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: external-secrets
+        namespace: external-secrets
+      roleName: notch-eso
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
 
 vpc:
   nat:
