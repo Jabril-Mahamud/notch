@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.service.name }}
+  annotations:
+    secret.reloader.stakater.com/reload: "{{ .Values.service.name }}-secrets"
 spec:
   replicas: {{ .Values.service.deployment.replicas | default 1 }}
   selector:
