@@ -24,6 +24,10 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
           {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ $.Values.service.name }}-secrets
+                optional: true
           {{- with $c.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
