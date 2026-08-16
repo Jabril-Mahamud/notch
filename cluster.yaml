@@ -29,3 +29,18 @@ managedNodeGroups:
   maxSize: 4
   privateNetworking: false # nodes in public subnets
   volumeSize: 30
+
+serviceAccounts:
+    - metadata:
+        name: external-secrets
+        namespace: external-secrets
+      roleName: notch-eso
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+    - metadata:
+        name: provider-aws
+        namespace: crossplane-system
+      roleName: notch-crossplane-aws
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
