@@ -9,12 +9,47 @@ metadata:
 iam:
   withOIDC: true
   serviceAccounts:
+    # The external-secrets Helm release runs with serviceAccount.create=false and
+    # reuses this SA, so eksctl must run before ArgoCD syncs the addon.
+    # Read-only, and only on the notch/ prefix.
     - metadata:
         name: external-secrets
         namespace: external-secrets
       roleName: notch-eso
+      attachPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+              - secretsmanager:DescribeSecret
+            Resource: arn:aws:secretsmanager:eu-west-1:570056717182:secret:notch/*
+          # ListSecrets and BatchGetSecretValue have no resource-level scoping,
+          # and the ExternalSecret `find` generator needs both.
+          - Effect: Allow
+            Action:
+              - secretsmanager:ListSecrets
+              - secretsmanager:BatchGetSecretValue
+            Resource: "*"
+
+    # roleOnly: Crossplane creates this SA itself from the DeploymentRuntimeConfig
+    # in notch-gitops/platform/addons/crossplane/runtime-config.yaml, which carries
+    # the eks.amazonaws.com/role-arn annotation. eksctl only needs the role and its
+    # OIDC trust policy for system:serviceaccount:crossplane-system:provider-aws.
+    - metadata:
+        name: provider-aws
+        namespace: crossplane-system
+      roleName: notch-crossplane-aws
+      roleOnly: true
       attachPolicyARNs:
-        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+
+# CloudNativePG needs PersistentVolumes, and EKS >=1.23 does not ship the EBS CSI
+# driver by default.
+addons:
+  - name: aws-ebs-csi-driver
+    wellKnownPolicies:
+      ebsCSIController: true
 
 vpc:
   nat:
@@ -29,18 +64,3 @@ managedNodeGroups:
   maxSize: 4
   privateNetworking: false # nodes in public subnets
   volumeSize: 30
-
-serviceAccounts:
-    - metadata:
-        name: external-secrets
-        namespace: external-secrets
-      roleName: notch-eso
-      attachPolicyARNs:
-        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
-    - metadata:
-        name: provider-aws
-        namespace: crossplane-system
-      roleName: notch-crossplane-aws
-      attachPolicyARNs:
-        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
