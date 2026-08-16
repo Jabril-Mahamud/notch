@@ -31,14 +31,19 @@ notch.io/env: {{ include "notch-app.env" . }}
 {{- end -}}
 
 {{/*
-Every secret name any container mounts via envFrom, comma separated, for the
-reloader annotation.
+Every secret any container reads, comma separated, for the reloader annotation.
+Covers both routes into a container: whole secrets via envFrom (`secrets`) and
+individual keys via secretKeyRef (`envSecrets`). Missing the second one means a
+rotated database password never restarts the pod that uses it.
 */}}
 {{- define "notch-app.reloadSecrets" -}}
 {{- $default := include "notch-app.secretName" . -}}
 {{- $all := list -}}
 {{- range $cname, $c := .Values.service.deployment.containers -}}
 {{- $all = concat $all (default (list $default) $c.secrets) -}}
+{{- range $k, $ref := (default (dict) $c.envSecrets) -}}
+{{- $all = append $all $ref.name -}}
+{{- end -}}
 {{- end -}}
 {{- join "," (uniq $all) -}}
 {{- end -}}
