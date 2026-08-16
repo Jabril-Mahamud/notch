@@ -1,0 +1,39 @@
+{{- $ing := .Values.service.ingress -}}
+{{- if $ing.enabled -}}
+{{- $name := include "notch-app.name" . -}}
+{{- $host := required "service.ingress.host is required when service.ingress.enabled" $ing.host -}}
+{{- if not $ing.rules -}}
+{{- fail "service.ingress.rules is empty - nothing would route to the service" -}}
+{{- end -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name | quote }}
+  labels:
+    {{- include "notch-app.labels" . | nindent 4 }}
+  {{- with $ing.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ $ing.className | default "nginx" }}
+  {{- if $ing.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ $ing.tls.secretName | default (printf "%s-tls" $name) | quote }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          {{- range $ing.rules }}
+          - path: {{ .path | default "/" }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ $name | quote }}
+                port:
+                  name: {{ required "each service.ingress.rules entry needs a portName" .portName }}
+          {{- end }}
+{{- end }}

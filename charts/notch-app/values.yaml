@@ -1,14 +1,57 @@
+# Defaults only. Real values are layered by the ApplicationSet in notch-gitops:
+#   envs/<env>/services.common.yaml    every service in an env
+#   services/<name>/service.yaml       one service, every env
+#   services/<name>/<env>/values.yaml  one service, one env
+
+global:
+  # Environment slug. Builds the Secrets Manager prefix notch/<env>/apps/<name>/.
+  env: ""
+
 service:
   name: ""
+
+  # Kubernetes Service type.
+  type: ClusterIP
+
+  # Env vars applied to every container. A container's own `env` wins on conflict.
+  env: {}
+
+  # Service ports. `targetPort` defaults to the port `name`, which must match a
+  # container port name in deployment.containers.<c>.ports.
   ports: []
+
+  ingress:
+    enabled: false
+    className: nginx
+    annotations: {}
+    host: ""
+    # [{ path, pathType, portName }] - portName must match a service port name.
+    rules: []
+    tls:
+      enabled: false
+      secretName: ""
+
+  # Syncs notch/<env>/apps/<name>/* from AWS Secrets Manager into <name>-secrets.
+  externalSecret:
+    enabled: true
+    refreshInterval: 1m
+
   deployment:
     replicas: 1
-    env: {}
-    containers:
-      app:
-        image:
-          ref: ""
-          pullPolicy: IfNotPresent
-        resources: {}
-        livenessProbe: {}
-        readinessProbe: {}
+    podSecurityContext: {}
+
+    # Deliberately empty. Helm deep-merges maps, so any container declared here
+    # would be injected into every service on top of the containers it declares.
+    #
+    # Shape:
+    #   <name>:
+    #     image: { ref: <required>, pullPolicy: IfNotPresent }
+    #     ports: [{ name, containerPort, protocol }]
+    #     env: { KEY: value }
+    #     envSecrets: { ENV_NAME: { name: <secret>, key: <key> } }
+    #     secrets: [<secret names for envFrom>]   # default: [<service>-secrets]
+    #     resources: {}
+    #     securityContext: {}
+    #     livenessProbe: {}
+    #     readinessProbe: {}
+    containers: {}

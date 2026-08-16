@@ -1,15 +1,21 @@
-{{- if .Values.service.ports }}
+{{- if .Values.service.ports -}}
+{{- $name := include "notch-app.name" . -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.service.name }}
+  name: {{ $name | quote }}
+  labels:
+    {{- include "notch-app.labels" . | nindent 4 }}
 spec:
+  type: {{ .Values.service.type | default "ClusterIP" }}
   selector:
-    app: {{ .Values.service.name }}
+    {{- include "notch-app.selectorLabels" . | nindent 4 }}
   ports:
     {{- range .Values.service.ports }}
-    - name: {{ .name }}
-      port: {{ .port }}
-      targetPort: {{ .targetPort | default .port }}
+    - name: {{ required "each service.ports entry needs a name" .name }}
+      port: {{ required (printf "service port %s needs a port" .name) .port }}
+      {{- /* Named target ports keep the Service tied to a specific container. */}}
+      targetPort: {{ .targetPort | default .name }}
+      protocol: {{ .protocol | default "TCP" }}
     {{- end }}
 {{- end }}

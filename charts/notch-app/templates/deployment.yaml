@@ -1,35 +1,73 @@
+{{- $svc := .Values.service -}}
+{{- $name := include "notch-app.name" . -}}
+{{- $defaultSecret := include "notch-app.secretName" . -}}
+{{- if not $svc.deployment.containers -}}
+{{- fail "service.deployment.containers is empty - the Deployment would have no containers" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.service.name }}
+  name: {{ $name | quote }}
+  labels:
+    {{- include "notch-app.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ .Values.service.name }}-secrets"
+    secret.reloader.stakater.com/reload: {{ include "notch-app.reloadSecrets" . | quote }}
 spec:
-  replicas: {{ .Values.service.deployment.replicas | default 1 }}
+  replicas: {{ $svc.deployment.replicas | default 1 }}
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
-      app: {{ .Values.service.name }}
+      {{- include "notch-app.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ .Values.service.name }}
+        {{- include "notch-app.labels" . | nindent 8 }}
     spec:
+      {{- with $svc.deployment.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
-      {{- range $name, $c := .Values.service.deployment.containers }}
-        - name: {{ $name }}
-          image: {{ $c.image.ref }}
-          imagePullPolicy: {{ $c.image.pullPolicy | default "IfNotPresent" }}
-          {{- with $.Values.service.env }}
+      {{- range $cname, $c := $svc.deployment.containers }}
+        - name: {{ $cname }}
+          image: {{ required (printf "containers.%s.image.ref is required" $cname) (dig "image" "ref" "" $c) | quote }}
+          imagePullPolicy: {{ dig "image" "pullPolicy" "IfNotPresent" $c }}
+          {{- with $c.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $c.ports }}
+          ports:
+            {{- range . }}
+            - name: {{ required "container port name is required" .name }}
+              containerPort: {{ required (printf "containers.%s port %s needs containerPort" $cname .name) .containerPort }}
+              protocol: {{ .protocol | default "TCP" }}
+            {{- end }}
+          {{- end }}
+          {{- /* Container env wins over the service-wide env. */}}
+          {{- $env := merge (deepCopy (default (dict) $c.env)) (default (dict) $svc.env) }}
+          {{- if or $env $c.envSecrets }}
           env:
-            {{- range $k, $v := . }}
+            {{- range $k, $v := $env }}
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
+            {{- range $k, $ref := (default (dict) $c.envSecrets) }}
+            - name: {{ $k }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required (printf "envSecrets.%s.name is required" $k) $ref.name }}
+                  key: {{ required (printf "envSecrets.%s.key is required" $k) $ref.key }}
+            {{- end }}
           {{- end }}
+          {{- /* Defaults to this service's own ESO secret. Override per container
+                 so a frontend does not receive database credentials. */}}
           envFrom:
+            {{- range (default (list $defaultSecret) $c.secrets) }}
             - secretRef:
-                name: {{ $.Values.service.name }}-secrets
+                name: {{ . }}
                 optional: true
+            {{- end }}
           {{- with $c.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
