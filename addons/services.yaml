@@ -1,0 +1,46 @@
+# One Application per services/<name>/, rendered through charts/notch-service.
+# Wave 7: after the CNPG cluster (5) and provider-sql config (6), so a service's
+# Database has somewhere to land on a fresh cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: services
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "7"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/Jabril-Mahamud/notch.git
+        # notch add pushes to dev; main only moves on phase releases
+        revision: dev
+        directories:
+          - path: services/*
+  template:
+    metadata:
+      name: "{{.path.basename}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/Jabril-Mahamud/notch.git
+        targetRevision: dev
+        path: charts/notch-service
+        helm:
+          # Relative to the chart path; ArgoCD allows it while it stays in the repo
+          valueFiles:
+            - ../../services/{{.path.basename}}/service.yaml
+            - ../../services/{{.path.basename}}/local/values.yaml
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.path.basename}}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - ServerSideApply=true
+          - SkipDryRunOnMissingResource=true
+        # A failed auto-sync isn't retried until the next commit
+        retry:
+          limit: 10
+          backoff: { duration: 30s, factor: 2, maxDuration: 5m }
