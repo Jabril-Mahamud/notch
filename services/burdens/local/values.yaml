@@ -1,0 +1,13 @@
+service:
+  endpoints:
+    internal:
+      hosts:
+        - burdens.notch.localhost:8080
+  deployment:
+    containers:
+      backend:
+        image:
+          ref: burdens-backend:local
+      frontend:
+        image:
+          ref: burdens-frontend:local
