@@ -22,6 +22,16 @@ notch tenant create <team>  # isolated namespace + scoped kubeconfig
 5. ingress-nginx routes traffic to your app
 6. Prometheus, Loki and Tempo behind Grafana give you metrics, logs and traces
 
+## Monorepos
+
+No root Dockerfile but `frontend/` + `backend/` (or `apps/frontend` + `apps/backend`) each with one? `notch add` builds both into one service: the frontend at `/`, the backend at `/api`, same host. Frontends that bake the API URL in at build time get it with `--build-arg`:
+
+```bash
+notch add https://github.com/you/app --postgres --secret JWT_SECRET --build-arg frontend:NEXT_PUBLIC_API_URL=/api
+```
+
+Services with `postgres: true` get `DATABASE_URL` plus the `PG*` vars. A container's own `env` in `service.yaml` overrides them by name and can use `$(PGUSER)` etc., e.g. for a `postgresql+asyncpg://` scheme.
+
 ## Tenants
 
 A tenant is a team with its own namespace, RBAC, quota and network policies on the shared cluster.
