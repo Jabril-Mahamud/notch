@@ -6,3 +6,5 @@ providerConfig: notch-shared-pg
 # Kubernetes-provider store reading from a central namespace. The source Secret
 # can't share the target's name and namespace, or ESO overwrites its own input.
 secretStore: notch-secrets
+# Tempo's OTLP/HTTP receiver, injected as OTEL_EXPORTER_OTLP_ENDPOINT.
+otlpEndpoint: http://tempo.tempo.svc:4318
