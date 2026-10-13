@@ -27,3 +27,9 @@ spec:
       - SkipDryRunOnMissingResource=true
       # Big CRDs overflow the last-applied annotation with client-side apply.
       - ServerSideApply=true
+    # ArgoCD doesn't wait for child Applications to be Healthy, so waves only
+    # order creation. The Provider in addons/ fails until Crossplane's CRDs
+    # land; without retry, a failed auto-sync waits for the next commit.
+    retry:
+      limit: 10
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }
