@@ -8,4 +8,4 @@ service:
       app: {}
   postgres: true
   secrets:
-    - APP_JWT_SECRET
+    - NOTCH_JWT_SECRET
