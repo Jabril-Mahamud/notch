@@ -51,4 +51,6 @@ tests/                     ← helm lint, template assertions, kuttl
 ## Reference
 - Vault plan: `~/Documents/openclaw/Projects/k8/Notch/Notch.md`
 - Yalla reference (READ ONLY): `/mnt/hdd/projects/work/yalla/`
-- v1 repos (archived on GitHub): `Jabril-Mahamud/notch`, `Jabril-Mahamud/notch-gitops`. `notch-hello-v1` still local at `/mnt/hdd/projects/k8/notch/notch-hello-v1/` (live test builds from it)
+- v1 repos (archived on GitHub): `Jabril-Mahamud/notch`, `Jabril-Mahamud/notch-gitops`
+- hello is a public starter deployed the customer way: `notch add https://github.com/heroku/node-js-getting-started --name hello --postgres --secret SESSION_SECRET`. Rerun after `notch up` to rebuild its image
+- Goal: `notch add` works on any GitHub repo or starter. Dockerfile optional (Railpack builds the rest)

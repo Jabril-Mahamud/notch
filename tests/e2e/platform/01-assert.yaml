@@ -1,0 +1,19 @@
+# Tempo ingests OTLP and serves it back: push one synthetic span, fetch it by
+# trace ID. Tests the platform pipeline without depending on an instrumented app.
+# The push runs from a curl pod (`kubectl create --raw` can't set the JSON
+# content type Tempo requires); the read goes through the API server's proxy.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      ID=$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')
+      NOW=$(date +%s)000000000
+      SPAN='{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"kuttl-probe"}}]},"scopeSpans":[{"spans":[{"traceId":"'$ID'","spanId":"'$(echo $ID | cut -c1-16)'","name":"probe","kind":1,"startTimeUnixNano":"'$NOW'","endTimeUnixNano":"'$NOW'"}]}]}]}'
+      kubectl -n tempo run "tempo-probe-$ID" --image=curlimages/curl:8.17.0 --restart=Never --rm -i --quiet -- \
+        curl -sf -H 'Content-Type: application/json' -d "$SPAN" http://tempo:4318/v1/traces >/dev/null
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        kubectl get --raw "/api/v1/namespaces/tempo/services/tempo:3200/proxy/api/traces/$ID" 2>/dev/null | grep -q kuttl-probe && exit 0
+        sleep 2
+      done
+      exit 1
