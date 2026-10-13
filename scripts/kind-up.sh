@@ -11,10 +11,13 @@ ARGOCD_VERSION=10.9.2
 kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER" --config kind.yaml
 kubectl config use-context "kind-$CLUSTER"
 
-# Step 2: postgres superuser. CNPG bootstraps from it and provider-sql connects
+# Step 2: namespaces ArgoCD expects to exist, and the postgres superuser. CNPG bootstraps from it and provider-sql connects
 # with it, so endpoint/port live here too (provider-sql wants endpoint; CNPG has none).
 # Only created when missing: regenerating would lock provider-sql out of an initialised DB.
 kubectl create namespace platform-db --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# Source namespace for the notch-secrets ClusterSecretStore:
+#   kubectl -n notch-secrets create secret generic <service>-secrets --from-literal=KEY=value
+kubectl create namespace notch-secrets --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n platform-db get secret notch-pg-superuser >/dev/null 2>&1 ||
   kubectl -n platform-db create secret generic notch-pg-superuser \
     --type=kubernetes.io/basic-auth \
