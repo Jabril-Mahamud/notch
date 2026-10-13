@@ -4,10 +4,13 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 commands:
   - script: |
+      set -e
       # LimitRange fills in requests/limits for a pod that sets none
       kubectl run defaults -n team-alpha --image=busybox --dry-run=server -o jsonpath='{.spec.containers[0].resources}' | grep -q '"memory":"64Mi"'
-      # Over the 2Gi requests.memory quota: rejected
-      ! kubectl run big -n team-alpha --image=busybox --dry-run=server \
-        --overrides='{"spec":{"containers":[{"name":"big","image":"busybox","resources":{"requests":{"memory":"3Gi"}}}]}}'
+      # Over the 2Gi requests.memory quota: rejected by the quota. The limit is
+      # set too, or the LimitRange's 256Mi default rejects it first.
+      kubectl run big -n team-alpha --image=busybox --dry-run=server \
+        --overrides='{"spec":{"containers":[{"name":"big","image":"busybox","resources":{"requests":{"memory":"3Gi"},"limits":{"memory":"3Gi"}}}]}}' \
+        2>&1 | grep -q "exceeded quota"
       # NodePort services are capped at zero
-      ! kubectl create service nodeport np -n team-alpha --tcp=80 --dry-run=server
+      kubectl create service nodeport np -n team-alpha --tcp=80 --dry-run=server 2>&1 | grep -q "exceeded quota"

@@ -41,6 +41,20 @@ check "LimitRange defaults every container (quota rejects pods without them)" \
   '.[] | select(.kind == "LimitRange") | .spec.limits[0] | .type == "Container" and .defaultRequest.cpu and .defaultRequest.memory and .default.memory'
 check "no CPU limit default (throttling, not protection)" \
   '.[] | select(.kind == "LimitRange") | .spec.limits[0].default | has("cpu") | not'
+
+# Step 3: network policies
+NP='.[] | select(.kind == "NetworkPolicy")'
+check "default-deny ingress for every pod" \
+  "[$NP | select(.spec.podSelector == {} and .spec.policyTypes == [\"Ingress\"] and (.spec.ingress // []) == [])] | length == 1"
+check "pods in the tenant namespace reach each other" \
+  "[$NP | .spec.ingress[]?.from[]? | select(.podSelector == {} and (has(\"namespaceSelector\") | not))] | length == 1"
+for ns in ingress-nginx monitoring; do
+  check "ingress allowed from $ns" \
+    "[$NP | .spec.ingress[]?.from[]?.namespaceSelector.matchLabels[\"kubernetes.io/metadata.name\"]] | any(. == \"$ns\")"
+done
+check "egress left open (DB, Tempo, DNS live outside the namespace)" \
+  "[$NP | .spec.policyTypes[]] | all(. == \"Ingress\")"
+
 OUT=$(helm template team-alpha "$CHART" -f tenants/team-alpha/platform.yaml --set tenant.quota.pods=3 2>/dev/null || true)
 check "platform.yaml overrides a single quota key, keeps the rest" \
   '.[] | select(.kind == "ResourceQuota") | .spec.hard.pods == "3" and .spec.hard["requests.cpu"] != null'
