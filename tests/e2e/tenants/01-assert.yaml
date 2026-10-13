@@ -1,0 +1,13 @@
+# Quotas: server-side dry-run runs admission (LimitRange, ResourceQuota)
+# without creating anything.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # LimitRange fills in requests/limits for a pod that sets none
+      kubectl run defaults -n team-alpha --image=busybox --dry-run=server -o jsonpath='{.spec.containers[0].resources}' | grep -q '"memory":"64Mi"'
+      # Over the 2Gi requests.memory quota: rejected
+      ! kubectl run big -n team-alpha --image=busybox --dry-run=server \
+        --overrides='{"spec":{"containers":[{"name":"big","image":"busybox","resources":{"requests":{"memory":"3Gi"}}}]}}'
+      # NodePort services are capped at zero
+      ! kubectl create service nodeport np -n team-alpha --tcp=80 --dry-run=server

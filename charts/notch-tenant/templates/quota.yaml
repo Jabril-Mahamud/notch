@@ -1,0 +1,29 @@
+{{- $name := include "tenant.name" . }}
+# Noisy-neighbour cap: one tenant can't starve the node for the others.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+spec:
+  hard:
+    {{- range $k, $v := .Values.tenant.quota }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+---
+# A quota on requests/limits rejects any pod that doesn't declare them, so
+# this fills them in. No default CPU limit: it only throttles, the quota on
+# requests is what shares the node.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      {{- toYaml .Values.tenant.containerDefaults | nindent 6 }}
