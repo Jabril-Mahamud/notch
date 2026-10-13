@@ -1,0 +1,29 @@
+{{- $svc := .Values.service }}
+{{- $name := include "notch.name" . }}
+{{- $hosts := dig "endpoints" "internal" "hosts" (list) $svc }}
+{{- if and $hosts $svc.ports }}
+{{- $multi := gt (len $svc.ports) 1 }}
+{{- $paths := list }}
+{{- range $svc.ports }}
+{{- if and $multi (not .path) }}{{ fail (printf "service port %s needs a path: multiple ports are split by path" .name) }}{{ end }}
+{{- $paths = append $paths (dict "path" (.path | default "/") "pathType" "Prefix" "backend" (dict "service" (dict "name" $name "port" (dict "name" .name)))) }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+  labels:
+    {{- include "notch.labels" . | nindent 4 }}
+spec:
+  ingressClassName: nginx
+  # Hosts carry the Kind port mapping (:8080) for the browser, but Ingress
+  # rejects a host with a port, so strip it.
+  rules:
+    {{- range $hosts }}
+    - host: {{ regexReplaceAll ":[0-9]+$" . "" }}
+      http:
+        paths:
+          {{- toYaml $paths | nindent 10 }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,13 @@
+service:
+  endpoints:
+    internal:
+      hosts:
+        - web.notch.localhost:8080
+  deployment:
+    containers:
+      frontend:
+        image:
+          ref: notch-web-frontend:local
+      backend:
+        image:
+          ref: notch-web-backend:local
