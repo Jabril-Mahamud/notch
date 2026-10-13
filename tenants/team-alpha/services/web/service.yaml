@@ -1,0 +1,11 @@
+# Same name in both tenants on purpose: proves tenant-prefixed names don't collide.
+service:
+  name: web
+  ports:
+    - name: http
+      port: 8080
+  deployment:
+    containers:
+      app:
+        # whoami defaults to :80; 8080 keeps it off privileged ports
+        args: ["--port", "8080"]
