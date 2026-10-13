@@ -70,4 +70,19 @@ check "values from tenants/<name>/platform.yaml" \
 check "auto-sync with prune and self-heal" \
   '.[0] | .spec.template.spec.syncPolicy.automated.prune and .spec.template.spec.syncPolicy.automated.selfHeal'
 
+# Services inside tenants: tenants/<tenant>/services/<svc>/
+OUT=$(cat addons/tenant-services.yaml 2>/dev/null || true)
+check "tenant-services ApplicationSet over tenants/*/services/* on dev" \
+  '.[0] | .kind == "ApplicationSet" and .spec.generators[0].git.directories[0].path == "tenants/*/services/*" and .spec.generators[0].git.revision == "dev"'
+check "syncs after the tenants themselves (wave 8)" \
+  '.[0] | .metadata.annotations["argocd.argoproj.io/sync-wave"] == "8"'
+check "app named <tenant>-<service> (app names are global)" \
+  '.[0] | .spec.template.metadata.name == "{{index .path.segments 1}}-{{.path.basename}}"'
+check "renders charts/notch-service into the tenant namespace" \
+  '.[0] | .spec.template.spec.source.path == "charts/notch-service" and .spec.template.spec.destination.namespace == "{{index .path.segments 1}}"'
+check "chart told the tenant namespace" \
+  '.[0] | .spec.template.spec.source.helm.parameters == [{"name":"namespace","value":"{{index .path.segments 1}}"}]'
+check "values: service.yaml then local/values.yaml" \
+  '.[0] | .spec.template.spec.source.helm.valueFiles == ["../../{{.path.path}}/service.yaml", "../../{{.path.path}}/local/values.yaml"]'
+
 exit $FAILED
