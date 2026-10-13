@@ -72,6 +72,21 @@ check "every container exports traces to Tempo over OTLP/HTTP" \
 check "trace service name is the service name" \
   '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "OTEL_SERVICE_NAME" and .value == "hello")'
 
+check "DATABASE_URL built from the PG vars (the common convention)" \
+  '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "DATABASE_URL" and .value == "postgresql://$(PGUSER):$(PGPASSWORD)@$(PGHOST):$(PGPORT)/$(PGDATABASE)")'
+check "DATABASE_URL after the vars it expands (k8s only expands earlier ones)" \
+  '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | (map(.name) | index("DATABASE_URL")) > (map(.name) | index("PGPASSWORD"))'
+OUT=$(helm template hello "$CHART" -f "$FIX/hello/service.yaml" -f "$FIX/hello/local/values.yaml" \
+  --set 'service.deployment.containers.app.env[0].name=DATABASE_URL' \
+  --set 'service.deployment.containers.app.env[0].value=postgresql+asyncpg://x')
+check "container env overrides a platform var by name, no duplicates" \
+  '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | ([.[] | select(.name == "DATABASE_URL") | .value] == ["postgresql+asyncpg://x"])'
+OUT=$(helm template hello "$CHART" -f "$FIX/hello/service.yaml" -f "$FIX/hello/local/values.yaml" \
+  --set 'service.deployment.containers.app.env[0].name=EXTRA' \
+  --set 'service.deployment.containers.app.env[0].value=$(PGHOST)')
+check "container env comes after platform env, so it can use \$(PGHOST)" \
+  '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | (map(.name) | index("EXTRA")) > (map(.name) | index("PGHOST"))'
+
 # Step 3: tenant service. The tenant chart owns the namespace; anything
 # cluster-scoped or in the shared secrets namespace gets a <tenant>- prefix so
 # two tenants can both run a "hello".
