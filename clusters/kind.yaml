@@ -27,3 +27,8 @@ spec:
       - SkipDryRunOnMissingResource=true
       # Big CRDs overflow the last-applied annotation with client-side apply.
       - ServerSideApply=true
+    # A failed auto-sync isn't retried until the next commit. Retry rides out
+    # CRDs that land late (e.g. provider-sql's, installed by Crossplane).
+    retry:
+      limit: 10
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }
