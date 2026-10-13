@@ -1,0 +1,36 @@
+{{- $name := include "tenant.name" . }}
+# Policies are additive: deny everything inbound, then allow back what's needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: {{ $name }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# Same namespace, the ingress controller (the only way in from outside), and
+# Prometheus scrapes. Another tenant's pods match none of these.
+# ponytail: ingress only. Egress stays open because DB, Tempo and DNS all live
+# outside the namespace; lock it down when a tenant must not reach the internet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-platform-and-self
+  namespace: {{ $name }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        # Bare podSelector = this namespace only
+        - podSelector: {}
+        {{- range list "ingress-nginx" "monitoring" }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
