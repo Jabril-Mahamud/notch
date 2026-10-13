@@ -41,9 +41,6 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := internal.OnDev(root); err != nil {
-		return err
-	}
 	src, cleanup, err := source(args[0])
 	if err != nil {
 		return err
@@ -54,22 +51,22 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// Prompt before the slow build so nobody has to babysit it.
-	values, err := promptSecrets(svc.Secrets)
-	if err != nil {
-		return err
-	}
-	if err := internal.BuildAndLoad(svc.Name, src); err != nil {
-		return err
-	}
-	if len(svc.Secrets) > 0 {
-		if err := internal.CreateSecret(svc.Name, svc.Secrets, values); err != nil {
+	dir := filepath.Join("services", svc.Name)
+	_, statErr := os.Stat(filepath.Join(root, dir))
+	exists := statErr == nil
+	// Only a new service commits; a rebuild works from any branch.
+	if !exists {
+		if err := internal.OnDev(root); err != nil {
 			return err
 		}
 	}
-	dir := filepath.Join("services", svc.Name)
-	if _, err := os.Stat(filepath.Join(root, dir)); err == nil {
+	if err := buildWithSecrets(svc, src); err != nil {
+		return err
+	}
+	if exists {
 		fmt.Printf("service %s exists, image rebuilt and loaded\n", svc.Name)
+		// On a fresh cluster the Deployment may not exist yet; it starts on the new image anyway.
+		_ = internal.Restart(svc.Name)
 		return nil
 	}
 	if _, err := internal.WriteService(root, svc); err != nil {
@@ -80,6 +77,21 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("service %s deploying, run `notch list` to check status\n", svc.Name)
 	return nil
+}
+
+func buildWithSecrets(svc internal.Service, src string) error {
+	// Prompt before the slow build so nobody has to babysit it.
+	values, err := promptSecrets(svc.Secrets)
+	if err != nil {
+		return err
+	}
+	if err := internal.BuildAndLoad(svc.Name, src); err != nil {
+		return err
+	}
+	if len(svc.Secrets) == 0 {
+		return nil
+	}
+	return internal.CreateSecret(svc.Name, svc.Secrets, values)
 }
 
 // source returns a local directory for the repo, cloning remotes.

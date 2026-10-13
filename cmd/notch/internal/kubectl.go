@@ -18,21 +18,34 @@ func KubectlOutput(args ...string) (string, error) {
 	return Output("kubectl", append([]string{"--context", Context}, args...)...)
 }
 
-// CreateSecret writes the source Secret the chart's ExternalSecret reads from.
+// CreateSecret writes (or overwrites) the source Secret the chart's
+// ExternalSecret reads from. Rendered client-side then applied, so rerunning
+// notch add rotates values instead of failing on "already exists".
 // Values go in on stdin, not argv, so they don't show up in ps.
 func CreateSecret(name string, keys, values []string) error {
-	c := exec.Command("kubectl", "--context", Context, "-n", "notch-secrets",
-		"create", "secret", "generic", name+"-secrets", "--from-env-file=/dev/stdin")
 	var env strings.Builder
 	for i, k := range keys {
 		fmt.Fprintf(&env, "%s=%s\n", k, values[i])
 	}
-	c.Stdin = strings.NewReader(env.String())
-	c.Stdout, c.Stderr = os.Stdout, os.Stderr
-	if err := c.Run(); err != nil {
-		return fmt.Errorf("create secret %s-secrets: %w", name, err)
+	render := exec.Command("kubectl", "-n", "notch-secrets", "create", "secret", "generic",
+		name+"-secrets", "--from-env-file=/dev/stdin", "--dry-run=client", "-o", "yaml")
+	render.Stdin, render.Stderr = strings.NewReader(env.String()), os.Stderr
+	manifest, err := render.Output()
+	if err != nil {
+		return fmt.Errorf("render secret %s-secrets: %w", name, err)
+	}
+	apply := exec.Command("kubectl", "--context", Context, "apply", "-f", "-")
+	apply.Stdin, apply.Stdout, apply.Stderr = strings.NewReader(string(manifest)), os.Stdout, os.Stderr
+	if err := apply.Run(); err != nil {
+		return fmt.Errorf("apply secret %s-secrets: %w", name, err)
 	}
 	return nil
+}
+
+// Restart rolls a service's pods. Images are tagged :local, so a rebuilt image
+// under the same tag is only picked up by new pods.
+func Restart(name string) error {
+	return Kubectl("-n", name, "rollout", "restart", "deploy/"+name)
 }
 
 // kind.yaml maps host 8080 to the ingress controller; Ingress hosts carry no port.
