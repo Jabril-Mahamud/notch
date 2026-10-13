@@ -1,0 +1,32 @@
+# Each tenant's web service deployed into its own namespace, reachable through
+# ingress-nginx (allowed by the tenant's network policy) and counted by its quota.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: team-alpha-web
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: team-beta-web
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      curl -sf http://web.team-alpha.notch.localhost:8080/ | grep -q "Hostname: web-"
+      curl -sf http://web.team-beta.notch.localhost:8080/ | grep -q "Hostname: web-"
+      kubectl -n team-alpha get resourcequota team-alpha -o jsonpath='{.status.used.pods}' | grep -qx 1

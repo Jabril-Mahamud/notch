@@ -72,6 +72,23 @@ check "every container exports traces to Tempo over OTLP/HTTP" \
 check "trace service name is the service name" \
   '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "OTEL_SERVICE_NAME" and .value == "hello")'
 
+# Step 3: tenant service. The tenant chart owns the namespace; anything
+# cluster-scoped or in the shared secrets namespace gets a <tenant>- prefix so
+# two tenants can both run a "hello".
+OUT=$(helm template hello "$CHART" -f "$FIX/hello/service.yaml" -f "$FIX/hello/local/values.yaml" --set namespace=team-alpha)
+check "tenant service renders no Namespace" \
+  'all(.[]; .kind != "Namespace")'
+check "namespaced objects land in the tenant namespace" \
+  '[.[] | select(.kind != "Database" and .kind != "Role") | .metadata.namespace] | all(. == "team-alpha")'
+check "Database and Role prefixed with the tenant" \
+  '[.[] | select(.kind == "Database" or .kind == "Role") | .metadata.name] | all(. == "team-alpha-hello")'
+check "db creds written into the tenant namespace" \
+  '.[] | select(.kind == "Role") | .spec.writeConnectionSecretToRef == {"name":"hello-db","namespace":"team-alpha"}'
+check "PGDATABASE is the prefixed database" \
+  '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "PGDATABASE" and .value == "team-alpha-hello")'
+check "source secret prefixed in notch-secrets" \
+  '.[] | select(.kind == "ExternalSecret") | .spec.data[0].remoteRef.key == "team-alpha-hello-secrets" and .spec.target.name == "hello-secrets"'
+
 # Step 2: two containers, path split
 OUT=$(render web)
 check "web has two containers" \

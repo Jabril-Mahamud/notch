@@ -35,7 +35,7 @@
 {{- range $k, $key := dict "PGHOST" "endpoint" "PGPORT" "port" "PGUSER" "username" "PGPASSWORD" "password" }}
 {{- $env = append $env (dict "name" $k "valueFrom" (dict "secretKeyRef" (dict "name" (printf "%s-db" $name) "key" $key))) }}
 {{- end }}
-{{- $env = append $env (dict "name" "PGDATABASE" "value" $name) }}
+{{- $env = append $env (dict "name" "PGDATABASE" "value" (include "notch.id" $)) }}
 {{- end }}
 {{- /* Standard OTel SDK vars: apps that don't trace ignore them. Tempo only takes traces, so metrics/logs exporters are off */}}
 {{- range $k, $v := dict "OTEL_EXPORTER_OTLP_ENDPOINT" $.Values.otlpEndpoint "OTEL_EXPORTER_OTLP_PROTOCOL" "http/protobuf" "OTEL_SERVICE_NAME" $name "OTEL_METRICS_EXPORTER" "none" "OTEL_LOGS_EXPORTER" "none" }}
@@ -48,7 +48,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name }}
-  namespace: {{ $name }}
+  namespace: {{ include "notch.namespace" . }}
   annotations:
     # Roll pods when the synced secret or db creds change
     reloader.stakater.com/auto: "true"

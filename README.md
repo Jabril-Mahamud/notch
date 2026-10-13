@@ -22,6 +22,17 @@ notch tenant create <team>  # isolated namespace + scoped kubeconfig
 5. ingress-nginx routes traffic to your app
 6. Prometheus, Loki and Tempo behind Grafana give you metrics, logs and traces
 
+## Tenants
+
+A tenant is a team with its own namespace, RBAC, quota and network policies on the shared cluster.
+
+```bash
+notch tenant create team-alpha       # pushes tenants/team-alpha/, writes team-alpha.kubeconfig
+export KUBECONFIG=$PWD/team-alpha.kubeconfig   # edit rights in team-alpha only, 24h token
+```
+
+Tenant services live in `tenants/<tenant>/services/<svc>/` (same `service.yaml` + `local/values.yaml` as platform services) and deploy into the tenant's namespace. Quota defaults are in `charts/notch-tenant/values.yaml`; override any key under `tenant.quota` in the tenant's `platform.yaml`.
+
 ## Stack
 
 - **ArgoCD** — GitOps sync
