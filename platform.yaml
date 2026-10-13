@@ -1,0 +1,34 @@
+# Notch platform definition
+# This file defines the platform: addons, cluster config, and deployment flow.
+# ArgoCD reads this (via the root Application) to bootstrap the cluster.
+
+platform:
+  name: notch
+  description: Self-hosted k8s deployment platform
+
+  deployment_flow:
+    - phase: 1
+      env_name: dev
+    - phase: 2
+      env_name: demo
+    - phase: 3
+      env_name: staging
+    - phase: 4
+      env_name: prod
+
+addons:
+  argocd: {}
+  crossplane: {}
+  cloudnative-pg: {}
+  external-secrets: {}
+  reloader: {}
+  ingress-nginx: {}
+  kube-prometheus-stack: {}
+  loki: {}
+
+clusters:
+  - env_name: dev
+    provider: kind
+    ingress:
+      domains:
+        - notch.localhost:8080

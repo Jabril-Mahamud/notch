@@ -1,0 +1,22 @@
+# Claude Code working files
+.claude/gotchas.md
+.claude/session-*
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
