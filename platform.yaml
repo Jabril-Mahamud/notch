@@ -25,6 +25,7 @@ addons:
   ingress-nginx: {}
   kube-prometheus-stack: {}
   loki: {}
+  alloy: {}
 
 clusters:
   - env_name: dev
