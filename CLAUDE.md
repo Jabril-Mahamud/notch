@@ -40,7 +40,7 @@ tests/                     ← helm lint, template assertions, kuttl
 3. Image `USER` must be numeric or `runAsNonRoot` gives `CreateContainerConfigError`
 4. Crossplane managed resources need explicit `providerConfigRef`, else they wait for `default`
 5. Use `xpkg.crossplane.io`, not `xpkg.upbound.io` (stale tags). Crossplane pinned 1.x.
-6. provider-sql wants `endpoint`, CNPG writes `host` — ExternalSecret renames it
+6. provider-sql wants `endpoint`, CNPG writes `host` — kind-up.sh puts `endpoint`/`port` in the superuser secret
 7. `app.kubernetes.io.instance` stays out of selectors (ArgoCD overwrites; selectors immutable)
 8. Containers are a map, not a list (Helm replaces lists)
 9. Big CRDs need `ServerSideApply=true`
@@ -51,4 +51,4 @@ tests/                     ← helm lint, template assertions, kuttl
 ## Reference
 - Vault plan: `~/Documents/openclaw/Projects/k8/Notch/Notch.md`
 - Yalla reference (READ ONLY): `/mnt/hdd/projects/work/yalla/`
-- v1 repos (archived): `/mnt/hdd/projects/k8/notch/{notch-v1,notch-gitops-v1,notch-hello-v1}/`
+- v1 repos (archived on GitHub): `Jabril-Mahamud/notch`, `Jabril-Mahamud/notch-gitops`. `notch-hello-v1` still local at `/mnt/hdd/projects/k8/notch/notch-hello-v1/` (live test builds from it)

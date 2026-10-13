@@ -1,0 +1,11 @@
+service:
+  name: hello
+  ports:
+    - name: http
+      port: 8000
+  deployment:
+    containers:
+      app: {}
+  postgres: true
+  secrets:
+    - NOTCH_JWT_SECRET

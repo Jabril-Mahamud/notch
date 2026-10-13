@@ -1,0 +1,12 @@
+# The brief's example: one container, ports taken from the service.
+service:
+  name: hello
+  ports:
+    - name: http
+      port: 8000
+  deployment:
+    containers:
+      app: {}
+  postgres: true
+  secrets:
+    - APP_JWT_SECRET

@@ -20,3 +20,7 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+docs/
+
+# Go
+bin/
