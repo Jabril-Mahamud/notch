@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -63,7 +64,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	if err := internal.Publish(root, svc.Name); err != nil {
+	if err := internal.Publish(root, filepath.Join("services", svc.Name), "feat: add "+svc.Name+" service"); err != nil {
 		return err
 	}
 	fmt.Printf("service %s deploying, run `notch list` to check status\n", svc.Name)
