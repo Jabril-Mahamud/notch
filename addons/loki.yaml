@@ -36,6 +36,14 @@ spec:
           replicas: 1
           persistence:
             enabled: false
+          # With persistence off the chart mounts nothing at /var/loki, and the
+          # root fs is read-only, so Loki crashloops on mkdir.
+          extraVolumes:
+            - name: data
+              emptyDir: {}
+          extraVolumeMounts:
+            - name: data
+              mountPath: /var/loki
           resources:
             requests: { cpu: 100m, memory: 256Mi }
             limits: { memory: 1Gi }
