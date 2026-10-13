@@ -29,21 +29,26 @@
 {{- if $svc.secrets }}
 {{- $_ := set $out "envFrom" (append ($c.envFrom | default list) (dict "secretRef" (dict "name" (printf "%s-secrets" $name)))) }}
 {{- end }}
-{{- if $svc.postgres }}
 {{- $env := $c.env | default list }}
+{{- if $svc.postgres }}
 {{- /* provider-sql writes endpoint, not host */}}
 {{- range $k, $key := dict "PGHOST" "endpoint" "PGPORT" "port" "PGUSER" "username" "PGPASSWORD" "password" }}
 {{- $env = append $env (dict "name" $k "valueFrom" (dict "secretKeyRef" (dict "name" (printf "%s-db" $name) "key" $key))) }}
 {{- end }}
-{{- $_ := set $out "env" (append $env (dict "name" "PGDATABASE" "value" $name)) }}
+{{- $env = append $env (dict "name" "PGDATABASE" "value" (include "notch.id" $)) }}
 {{- end }}
+{{- /* Standard OTel SDK vars: apps that don't trace ignore them. Tempo only takes traces, so metrics/logs exporters are off */}}
+{{- range $k, $v := dict "OTEL_EXPORTER_OTLP_ENDPOINT" $.Values.otlpEndpoint "OTEL_EXPORTER_OTLP_PROTOCOL" "http/protobuf" "OTEL_SERVICE_NAME" $name "OTEL_METRICS_EXPORTER" "none" "OTEL_LOGS_EXPORTER" "none" }}
+{{- $env = append $env (dict "name" $k "value" $v) }}
+{{- end }}
+{{- $_ := set $out "env" $env }}
 {{- $containers = append $containers $out }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name }}
-  namespace: {{ $name }}
+  namespace: {{ include "notch.namespace" . }}
   annotations:
     # Roll pods when the synced secret or db creds change
     reloader.stakater.com/auto: "true"

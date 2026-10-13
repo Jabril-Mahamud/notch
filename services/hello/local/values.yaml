@@ -7,4 +7,4 @@ service:
     containers:
       app:
         image:
-          ref: notch-hello:local
+          ref: hello:local

@@ -27,3 +27,6 @@ bin/
 
 # kuttl writes the test kubeconfig to the working directory
 kubeconfig
+
+# notch tenant create writes a live token here
+*.kubeconfig

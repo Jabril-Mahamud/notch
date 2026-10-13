@@ -8,8 +8,9 @@ Point it at a repo — it builds, ships, routes, and provisions a database. Driv
 
 ```bash
 notch up          # bring up the cluster + platform
-notch add <repo>  # deploy an app
+notch add <repo>  # deploy any repo or GitHub starter, Dockerfile optional
 notch list        # see what's running
+notch tenant create <team>  # isolated namespace + scoped kubeconfig
 ```
 
 ## How it works
@@ -19,7 +20,18 @@ notch list        # see what's running
 3. The chart renders: Deployment, Service, Ingress, DB claim, ExternalSecret
 4. Crossplane provisions a Postgres DB per service
 5. ingress-nginx routes traffic to your app
-6. Prometheus + Loki + Grafana give you observability
+6. Prometheus, Loki and Tempo behind Grafana give you metrics, logs and traces
+
+## Tenants
+
+A tenant is a team with its own namespace, RBAC, quota and network policies on the shared cluster.
+
+```bash
+notch tenant create team-alpha       # pushes tenants/team-alpha/, writes team-alpha.kubeconfig
+export KUBECONFIG=$PWD/team-alpha.kubeconfig   # edit rights in team-alpha only, 24h token
+```
+
+Tenant services live in `tenants/<tenant>/services/<svc>/` (same `service.yaml` + `local/values.yaml` as platform services) and deploy into the tenant's namespace. Quota defaults are in `charts/notch-tenant/values.yaml`; override any key under `tenant.quota` in the tenant's `platform.yaml`.
 
 ## Stack
 
@@ -31,6 +43,7 @@ notch list        # see what's running
 - **kube-prometheus-stack** — metrics + dashboards
 - **Loki** — log aggregation
 - **Alloy** — ships pod logs to Loki
+- **Tempo** — distributed tracing (apps get `OTEL_*` env injected)
 
 ## License
 

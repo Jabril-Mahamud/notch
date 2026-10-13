@@ -1,0 +1,28 @@
+{{- $name := include "tenant.name" . }}
+# The identity behind the tenant's scoped kubeconfig.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}-deployer
+  namespace: {{ $name }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+---
+# ponytail: the built-in edit ClusterRole, bound per namespace. It already
+# leaves out RBAC and ResourceQuota writes, so a tenant can't grant itself more
+# or lift its own quota. Write a custom Role if edit turns out too broad.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-deployer
+  namespace: {{ $name }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}-deployer
+    namespace: {{ $name }}

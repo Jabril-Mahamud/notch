@@ -1,6 +1,11 @@
 package internal
 
-import "os"
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+)
 
 // Clone shallow-clones a repo into a temp dir; the caller removes it.
 func Clone(url string) (string, error) {
@@ -17,11 +22,44 @@ func Clone(url string) (string, error) {
 
 func ImageRef(name string) string { return name + ":local" }
 
+// The plan format moves with railpack; keep this in step with mise.toml.
+const railpackFrontend = "ghcr.io/railwayapp/railpack-frontend:v0.40.1"
+
 // BuildAndLoad builds the image and side-loads it: Kind nodes can't pull from
 // the host's docker daemon.
 func BuildAndLoad(name, dir string) error {
-	if err := Run("docker", "build", "-t", ImageRef(name), dir); err != nil {
+	build := dockerBuild
+	if !HasDockerfile(dir) {
+		build = railpackBuild
+	}
+	if err := build(name, dir); err != nil {
 		return err
 	}
 	return Run("kind", "load", "docker-image", ImageRef(name), "--name", Cluster)
+}
+
+func dockerBuild(name, dir string) error {
+	return Run("docker", "build", "-t", ImageRef(name), dir)
+}
+
+// railpackBuild detects the stack and start command, then builds through
+// Railpack's BuildKit frontend. ponytail: chosen over Cloud Native Buildpacks
+// because pack can't export into Docker's containerd image store; this is
+// plain buildx, so it works wherever docker build does.
+func railpackBuild(name, dir string) error {
+	if _, err := exec.LookPath("railpack"); err != nil {
+		return fmt.Errorf("no Dockerfile in %s and railpack isn't installed: run `mise install` in the notch repo", dir)
+	}
+	// Plan goes to a temp dir so a local source tree isn't touched.
+	tmp, err := os.MkdirTemp("", "notch-plan-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	plan := filepath.Join(tmp, "railpack-plan.json")
+	if err := Run("railpack", "prepare", dir, "--plan-out", plan); err != nil {
+		return err
+	}
+	return Run("docker", "buildx", "build", "--load", "-t", ImageRef(name),
+		"--build-arg", "BUILDKIT_SYNTAX="+railpackFrontend, "-f", plan, dir)
 }

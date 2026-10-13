@@ -1,4 +1,4 @@
-# hello deployed by the services ApplicationSet, end to end: DB, secret, ingress.
+# hello (a public GitHub starter, deployed with notch add) end to end: DB, secret, ingress.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -24,4 +24,4 @@ kind: TestAssert
 commands:
   - command: kubectl wait --for=condition=Ready database.postgresql.sql.crossplane.io/hello --timeout=10s
   - command: kubectl -n hello wait --for=condition=Ready externalsecret/hello-secrets --timeout=10s
-  - command: curl -sf http://hello.notch.localhost:8080/health
+  - command: curl -sf http://hello.notch.localhost:8080/

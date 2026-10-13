@@ -87,6 +87,17 @@ status:
   health:
     status: Healthy
 ---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:

@@ -1,0 +1,37 @@
+# Both tenants rendered by the tenants ApplicationSet.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tenant-team-alpha
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tenant-team-beta
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+# RBAC: the deployer edits its own namespace, nothing else, and can't widen its
+# own access. `can-i` exits 1 on "no". kuttl runs scripts with sh -c: without
+# set -e only the last line counts, and `! cmd` never trips set -e, so expected
+# denials are written `if cmd; then exit 1; fi`.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      AS=--as=system:serviceaccount:team-alpha:team-alpha-deployer
+      kubectl auth can-i create deployments -n team-alpha $AS
+      if kubectl auth can-i create deployments -n team-beta $AS; then exit 1; fi
+      if kubectl auth can-i create rolebindings -n team-alpha $AS; then exit 1; fi
+      if kubectl auth can-i create namespaces $AS; then exit 1; fi

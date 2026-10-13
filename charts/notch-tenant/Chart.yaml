@@ -1,0 +1,5 @@
+apiVersion: v2
+name: notch-tenant
+description: Renders a Notch tenant (namespace, RBAC, quotas, network policies) from tenants/<name>/platform.yaml
+type: application
+version: 0.1.0

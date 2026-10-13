@@ -1,0 +1,42 @@
+# Trace backend. Apps push OTLP straight to it (the chart sets OTEL_* env on
+# every container), so there's no collector in between.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: tempo
+    # ponytail: the single-binary chart is deprecated upstream but still the
+    # smallest Tempo there is. Move to tempo-distributed if it stops shipping.
+    targetRevision: "1.24.4"
+    helm:
+      # ponytail: traces on emptyDir, gone with the pod. Fine for Kind; a real
+      # cluster wants object storage.
+      valuesObject:
+        tempo:
+          # Default receivers include OTLP gRPC 4317 and HTTP 4318.
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          # Nothing is mounted at /var/tempo with persistence off, and the
+          # image runs as 10001, so the WAL write fails without this.
+          extraVolumeMounts:
+            - name: data
+              mountPath: /var/tempo
+        extraVolumes:
+          - name: data
+            emptyDir: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tempo
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

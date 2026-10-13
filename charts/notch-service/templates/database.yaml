@@ -1,10 +1,11 @@
 {{- if .Values.service.postgres }}
 {{- $name := include "notch.name" . }}
+{{- $id := include "notch.id" . }}
 # Role before Database: the Database is owned by it
 apiVersion: postgresql.sql.crossplane.io/v1alpha1
 kind: Role
 metadata:
-  name: {{ $name }}
+  name: {{ $id }}
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
   labels:
@@ -19,12 +20,12 @@ spec:
   # provider-sql generates the password and writes endpoint/port/username/password here
   writeConnectionSecretToRef:
     name: {{ $name }}-db
-    namespace: {{ $name }}
+    namespace: {{ include "notch.namespace" . }}
 ---
 apiVersion: postgresql.sql.crossplane.io/v1alpha1
 kind: Database
 metadata:
-  name: {{ $name }}
+  name: {{ $id }}
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
   labels:
@@ -33,5 +34,5 @@ spec:
   providerConfigRef:
     name: {{ .Values.providerConfig }}
   forProvider:
-    owner: {{ $name }}
+    owner: {{ $id }}
 {{- end }}

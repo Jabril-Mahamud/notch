@@ -62,14 +62,21 @@ func NameFrom(src string) (string, error) {
 
 func ValidSecretKey(k string) bool { return envKey.MatchString(k) }
 
+// ValidName: names become namespaces and Deployments, so DNS label rules.
+func ValidName(n string) bool { return dnsLabel.MatchString(n) }
+
+// HasDockerfile decides docker build vs Railpack.
+func HasDockerfile(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "Dockerfile"))
+	return err == nil
+}
+
 // DetectPort reads EXPOSE from the Dockerfile, else guesses from the stack.
 func DetectPort(dir string) (int, error) {
-	df, err := os.ReadFile(filepath.Join(dir, "Dockerfile"))
-	if err != nil {
-		return 0, fmt.Errorf("no Dockerfile in %s: notch builds every service from one", dir)
-	}
-	if m := exposeRe.FindSubmatch(df); m != nil {
-		return strconv.Atoi(string(m[1]))
+	if df, err := os.ReadFile(filepath.Join(dir, "Dockerfile")); err == nil {
+		if m := exposeRe.FindSubmatch(df); m != nil {
+			return strconv.Atoi(string(m[1]))
+		}
 	}
 	for _, s := range stackPorts {
 		if _, err := os.Stat(filepath.Join(dir, s.marker)); err == nil {
@@ -87,7 +94,11 @@ service:
       port: {{.Port}}
   deployment:
     containers:
-      app: {}
+      app:
+        # Starters listen on $PORT; Dockerfile apps that ignore it lose nothing.
+        env:
+          - name: PORT
+            value: "{{.Port}}"
 {{- if .Postgres}}
   postgres: true
 {{- end}}
@@ -143,17 +154,17 @@ func OnDev(root string) error {
 		return err
 	}
 	if branch != "dev" {
-		return fmt.Errorf("on branch %q: notch add commits to dev, check it out first", branch)
+		return fmt.Errorf("on branch %q: notch commits to dev, check it out first", branch)
 	}
 	return nil
 }
 
-// Publish commits the service to dev and pushes it.
-func Publish(root, name string) error {
-	if err := RunIn(root, "git", "add", filepath.Join("services", name)); err != nil {
+// Publish commits path (relative to root) to dev and pushes it.
+func Publish(root, path, msg string) error {
+	if err := RunIn(root, "git", "add", path); err != nil {
 		return err
 	}
-	if err := RunIn(root, "git", "commit", "-m", "feat: add "+name+" service"); err != nil {
+	if err := RunIn(root, "git", "commit", "-m", msg); err != nil {
 		return err
 	}
 	return RunIn(root, "git", "push", "origin", "dev")

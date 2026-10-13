@@ -1,0 +1,15 @@
+# Everything else comes from tenants/<name>/platform.yaml.
+tenant:
+  # ponytail: sized so two tenants plus the platform fit one Kind node. Any key
+  # can be overridden per tenant in platform.yaml; Helm merges maps key by key.
+  quota:
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.memory: 4Gi
+    pods: "20"
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+  # Applied to containers that don't set their own.
+  containerDefaults:
+    defaultRequest: { cpu: 50m, memory: 64Mi }
+    default: { memory: 256Mi }

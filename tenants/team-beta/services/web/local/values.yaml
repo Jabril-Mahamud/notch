@@ -1,0 +1,10 @@
+service:
+  endpoints:
+    internal:
+      hosts:
+        - web.team-beta.notch.localhost:8080
+  deployment:
+    containers:
+      app:
+        image:
+          ref: traefik/whoami:v1.11.0
