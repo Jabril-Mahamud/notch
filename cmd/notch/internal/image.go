@@ -25,21 +25,30 @@ func ImageRef(name string) string { return name + ":local" }
 // The plan format moves with railpack; keep this in step with mise.toml.
 const railpackFrontend = "ghcr.io/railwayapp/railpack-frontend:v0.40.1"
 
-// BuildAndLoad builds the image and side-loads it: Kind nodes can't pull from
-// the host's docker daemon.
-func BuildAndLoad(name, dir string) error {
-	build := dockerBuild
-	if !HasDockerfile(dir) {
-		build = railpackBuild
+// BuildAndLoad builds <name>:local and side-loads it: Kind nodes can't pull
+// from the host's docker daemon. buildArgs are KEY=VALUE, Dockerfile builds only.
+func BuildAndLoad(name, dir string, buildArgs []string) error {
+	var err error
+	switch {
+	case HasDockerfile(dir):
+		err = dockerBuild(name, dir, buildArgs)
+	case len(buildArgs) > 0:
+		err = fmt.Errorf("--build-arg needs a Dockerfile in %s; Railpack builds take none", dir)
+	default:
+		err = railpackBuild(name, dir)
 	}
-	if err := build(name, dir); err != nil {
+	if err != nil {
 		return err
 	}
 	return Run("kind", "load", "docker-image", ImageRef(name), "--name", Cluster)
 }
 
-func dockerBuild(name, dir string) error {
-	return Run("docker", "build", "-t", ImageRef(name), dir)
+func dockerBuild(name, dir string, buildArgs []string) error {
+	args := []string{"build", "-t", ImageRef(name)}
+	for _, a := range buildArgs {
+		args = append(args, "--build-arg", a)
+	}
+	return Run("docker", append(args, dir)...)
 }
 
 // railpackBuild detects the stack and start command, then builds through
