@@ -20,6 +20,9 @@ service:
         env:
           - name: PORT
             value: "8000"
+          # Async SQLAlchemy wants the asyncpg driver in the scheme.
+          - name: DATABASE_URL
+            value: postgresql+asyncpg://$(PGUSER):$(PGPASSWORD)@$(PGHOST):$(PGPORT)/$(PGDATABASE)
       frontend:
         ports:
           - name: frontend
