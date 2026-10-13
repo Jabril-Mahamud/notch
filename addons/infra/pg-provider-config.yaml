@@ -1,0 +1,20 @@
+# Group is postgresql.sql.crossplane.io, not sql.crossplane.io: provider-sql
+# ships a ProviderConfig per database flavour. The chart's Role and Database
+# name it via providerConfigRef or they wait forever for "default".
+apiVersion: postgresql.sql.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: notch-shared-pg
+  annotations:
+    # After the CNPG Cluster (wave 5) so the endpoint resolves.
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  credentials:
+    source: PostgreSQLConnectionSecret
+    # Same secret CNPG bootstraps from. provider-sql wants `endpoint` and CNPG
+    # never writes one, so kind-up.sh puts endpoint/port in it up front.
+    connectionSecretRef:
+      namespace: platform-db
+      name: notch-pg-superuser
+  # CNPG serves TLS with its own internal CA, so the verify-full default fails.
+  sslMode: require

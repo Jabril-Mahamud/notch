@@ -1,0 +1,26 @@
+# Shared Postgres for every service with `postgres: true`. The chart's Role and
+# Database CRs land here through provider-sql (notch-shared-pg).
+# Superuser secret notch-pg-superuser is created by scripts/kind-up.sh, along
+# with the platform-db namespace: not in git, so a prune can't take it.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: notch-pg
+  namespace: platform-db
+  annotations:
+    # After the CNPG operator (wave 1) has installed the Cluster CRD.
+    argocd.argoproj.io/sync-wave: "5"
+    # Stateful: never let a pruned manifest take the PVCs with it.
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  instances: 1
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: notch-pg-superuser
+  storage:
+    # No storageClass: uses the cluster default (kind: standard).
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
