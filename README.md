@@ -19,7 +19,7 @@ notch list        # see what's running
 3. The chart renders: Deployment, Service, Ingress, DB claim, ExternalSecret
 4. Crossplane provisions a Postgres DB per service
 5. ingress-nginx routes traffic to your app
-6. Prometheus + Loki + Grafana give you observability
+6. Prometheus, Loki and Tempo behind Grafana give you metrics, logs and traces
 
 ## Stack
 
@@ -31,6 +31,7 @@ notch list        # see what's running
 - **kube-prometheus-stack** — metrics + dashboards
 - **Loki** — log aggregation
 - **Alloy** — ships pod logs to Loki
+- **Tempo** — distributed tracing (apps get `OTEL_*` env injected)
 
 ## License
 

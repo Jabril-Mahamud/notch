@@ -31,6 +31,9 @@ spec:
             - name: Loki
               type: loki
               url: http://loki-gateway.loki.svc
+            - name: Tempo
+              type: tempo
+              url: http://tempo.tempo.svc:3200
         prometheusOperator:
           resources:
             requests: { cpu: 50m, memory: 64Mi }
