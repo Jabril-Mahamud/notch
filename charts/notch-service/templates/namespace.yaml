@@ -1,3 +1,4 @@
+{{- if not .Values.namespace }}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -6,3 +7,4 @@ metadata:
     argocd.argoproj.io/sync-wave: "-2"
   labels:
     {{- include "notch.labels" . | nindent 4 }}
+{{- end }}
