@@ -1,6 +1,6 @@
 # Applied directly by the root app, not via Helm: provider-sql is a Crossplane
 # package. Its CRD comes from the crossplane chart (wave 2), so this sits a wave
-# later; the root app's retry covers the gap while Crossplane starts.
+# later, once the crossplane Application is Healthy.
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
 metadata:

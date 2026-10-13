@@ -25,7 +25,8 @@ spec:
         grafana:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
-            limits: { memory: 256Mi }
+            # 256Mi OOMKills on startup.
+            limits: { memory: 512Mi }
         prometheusOperator:
           resources:
             requests: { cpu: 50m, memory: 64Mi }
