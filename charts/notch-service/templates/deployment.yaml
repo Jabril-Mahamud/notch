@@ -29,19 +29,27 @@
 {{- if $svc.secrets }}
 {{- $_ := set $out "envFrom" (append ($c.envFrom | default list) (dict "secretRef" (dict "name" (printf "%s-secrets" $name)))) }}
 {{- end }}
-{{- $env := $c.env | default list }}
+{{- /* Platform env first, container env last: k8s only expands $(VAR) from earlier entries, so apps can build on $(PGHOST) etc. */}}
+{{- $platform := list }}
 {{- if $svc.postgres }}
 {{- /* provider-sql writes endpoint, not host */}}
 {{- range $k, $key := dict "PGHOST" "endpoint" "PGPORT" "port" "PGUSER" "username" "PGPASSWORD" "password" }}
-{{- $env = append $env (dict "name" $k "valueFrom" (dict "secretKeyRef" (dict "name" (printf "%s-db" $name) "key" $key))) }}
+{{- $platform = append $platform (dict "name" $k "valueFrom" (dict "secretKeyRef" (dict "name" (printf "%s-db" $name) "key" $key))) }}
 {{- end }}
-{{- $env = append $env (dict "name" "PGDATABASE" "value" (include "notch.id" $)) }}
+{{- $platform = append $platform (dict "name" "PGDATABASE" "value" (include "notch.id" $)) }}
+{{- /* The Heroku/Railway convention most apps read. provider-sql passwords are alphanumeric, so no URL-encoding */}}
+{{- $platform = append $platform (dict "name" "DATABASE_URL" "value" "postgresql://$(PGUSER):$(PGPASSWORD)@$(PGHOST):$(PGPORT)/$(PGDATABASE)") }}
 {{- end }}
 {{- /* Standard OTel SDK vars: apps that don't trace ignore them. Tempo only takes traces, so metrics/logs exporters are off */}}
 {{- range $k, $v := dict "OTEL_EXPORTER_OTLP_ENDPOINT" $.Values.otlpEndpoint "OTEL_EXPORTER_OTLP_PROTOCOL" "http/protobuf" "OTEL_SERVICE_NAME" $name "OTEL_METRICS_EXPORTER" "none" "OTEL_LOGS_EXPORTER" "none" }}
-{{- $env = append $env (dict "name" $k "value" $v) }}
+{{- $platform = append $platform (dict "name" $k "value" $v) }}
 {{- end }}
-{{- $_ := set $out "env" $env }}
+{{- /* A container var replaces the platform one of the same name; duplicates break server-side apply */}}
+{{- $own := dict }}
+{{- range $c.env }}{{ $_ := set $own .name true }}{{ end }}
+{{- $env := list }}
+{{- range $platform }}{{ if not (hasKey $own .name) }}{{ $env = append $env . }}{{ end }}{{ end }}
+{{- $_ := set $out "env" (concat $env ($c.env | default list)) }}
 {{- $containers = append $containers $out }}
 {{- end }}
 apiVersion: apps/v1
