@@ -1,0 +1,27 @@
+# hello deployed by the services ApplicationSet, end to end: DB, secret, ingress.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hello
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  namespace: hello
+status:
+  readyReplicas: 1
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+# Conditions are lists, which kuttl matches whole; kubectl wait checks one entry.
+commands:
+  - command: kubectl wait --for=condition=Ready database.postgresql.sql.crossplane.io/hello --timeout=10s
+  - command: kubectl -n hello wait --for=condition=Ready externalsecret/hello-secrets --timeout=10s
+  - command: curl -sf http://hello.notch.localhost:8080/health
