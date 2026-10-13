@@ -10,6 +10,7 @@ Point it at a repo — it builds, ships, routes, and provisions a database. Driv
 notch up          # bring up the cluster + platform
 notch add <repo>  # deploy an app
 notch list        # see what's running
+notch tenant create <team>  # isolated namespace + scoped kubeconfig
 ```
 
 ## How it works

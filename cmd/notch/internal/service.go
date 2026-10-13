@@ -143,17 +143,17 @@ func OnDev(root string) error {
 		return err
 	}
 	if branch != "dev" {
-		return fmt.Errorf("on branch %q: notch add commits to dev, check it out first", branch)
+		return fmt.Errorf("on branch %q: notch commits to dev, check it out first", branch)
 	}
 	return nil
 }
 
-// Publish commits the service to dev and pushes it.
-func Publish(root, name string) error {
-	if err := RunIn(root, "git", "add", filepath.Join("services", name)); err != nil {
+// Publish commits path (relative to root) to dev and pushes it.
+func Publish(root, path, msg string) error {
+	if err := RunIn(root, "git", "add", path); err != nil {
 		return err
 	}
-	if err := RunIn(root, "git", "commit", "-m", "feat: add "+name+" service"); err != nil {
+	if err := RunIn(root, "git", "commit", "-m", msg); err != nil {
 		return err
 	}
 	return RunIn(root, "git", "push", "origin", "dev")
