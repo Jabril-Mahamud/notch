@@ -11,9 +11,9 @@ commands:
       kubectl -n team-alpha wait pod/np-target --for=condition=Ready --timeout=60s
       IP=$(kubectl -n team-alpha get pod np-target -o jsonpath='{.status.podIP}')
       probe() { # namespace -> wget's output against the listener
-        kubectl -n "$1" run "np-probe-$RANDOM" --image=busybox --restart=Never --rm -i --quiet \
+        kubectl -n "$1" run np-probe --image=busybox --restart=Never --rm -i --quiet \
           --command -- sh -c "wget -T 3 -O /dev/null http://$IP:8080/ 2>&1 || true"
       }
       probe team-alpha | grep -q 404
-      ! probe team-beta | grep -q 404
+      if probe team-beta | grep -q 404; then exit 1; fi
       kubectl -n team-alpha delete pod np-target --wait=false
