@@ -30,7 +30,7 @@ tests/                     ← helm lint, template assertions, kuttl
 - Tests first (TDD): write the test, watch it fail, implement.
 - Gotchas go in `.claude/gotchas.md` the moment something breaks.
 - Comment the WHY, not the WHAT.
-- No EKS code until Phase 3. Kind only.
+- Local first: the whole stack is feature-complete on Kind (Phase 3) before any cloud code (Civo/EKS, Phase 4). Own apps come after a cloud deploy works (Phase 5).
 - Use Yalla vocabulary in all docs and code.
 - README is public-facing — no mention of "learning project" or "interview prep".
 
