@@ -30,6 +30,7 @@ notch list        # see what's running
 - **ingress-nginx** — routing + TLS
 - **kube-prometheus-stack** — metrics + dashboards
 - **Loki** — log aggregation
+- **Alloy** — ships pod logs to Loki
 
 ## License
 

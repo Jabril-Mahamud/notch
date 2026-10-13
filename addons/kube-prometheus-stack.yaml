@@ -27,6 +27,10 @@ spec:
             requests: { cpu: 50m, memory: 128Mi }
             # 256Mi OOMKills on startup.
             limits: { memory: 512Mi }
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              url: http://loki-gateway.loki.svc
         prometheusOperator:
           resources:
             requests: { cpu: 50m, memory: 64Mi }
