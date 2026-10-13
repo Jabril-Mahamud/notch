@@ -1,0 +1,10 @@
+service:
+  endpoints:
+    internal:
+      hosts:
+        - hello.notch.localhost:8080
+  deployment:
+    containers:
+      app:
+        image:
+          ref: notch-hello:local

@@ -1,0 +1,63 @@
+{{- $svc := .Values.service }}
+{{- $name := include "notch.name" . }}
+{{- $seen := dict }}
+{{- $containers := list }}
+{{- range $cname, $c := required "service.deployment.containers is required" (dig "deployment" "containers" nil $svc) }}
+{{- $c = $c | default dict }}
+{{- /* Single-container services skip ports: they inherit the service ports */}}
+{{- $raw := $c.ports }}
+{{- if not $raw }}
+{{- $raw = list }}
+{{- range $svc.ports }}{{ $raw = append $raw (dict "name" .name "containerPort" .port) }}{{ end }}
+{{- end }}
+{{- $ports := list }}
+{{- range $raw }}
+{{- /* Port names are pod-wide: two containers both naming a port "http" collide */}}
+{{- if hasKey $seen .name }}{{ fail (printf "port name %q is used by more than one container" .name) }}{{ end }}
+{{- $_ := set $seen .name true }}
+{{- $ports = append $ports (merge (deepCopy .) (dict "protocol" "TCP")) }}
+{{- end }}
+{{- $out := omit $c "image" "ports" }}
+{{- $_ := set $out "name" $cname }}
+{{- $_ := set $out "image" (required (printf "service.deployment.containers.%s.image.ref is required" $cname) (dig "image" "ref" "" $c)) }}
+{{- with $ports }}
+{{- $_ := set $out "ports" . }}
+{{- $probe := dict "tcpSocket" (dict "port" (first .).name) }}
+{{- if not $c.readinessProbe }}{{ $_ := set $out "readinessProbe" $probe }}{{ end }}
+{{- if not $c.livenessProbe }}{{ $_ := set $out "livenessProbe" $probe }}{{ end }}
+{{- end }}
+{{- if $svc.secrets }}
+{{- $_ := set $out "envFrom" (append ($c.envFrom | default list) (dict "secretRef" (dict "name" (printf "%s-secrets" $name)))) }}
+{{- end }}
+{{- if $svc.postgres }}
+{{- $env := $c.env | default list }}
+{{- /* provider-sql writes endpoint, not host */}}
+{{- range $k, $key := dict "PGHOST" "endpoint" "PGPORT" "port" "PGUSER" "username" "PGPASSWORD" "password" }}
+{{- $env = append $env (dict "name" $k "valueFrom" (dict "secretKeyRef" (dict "name" (printf "%s-db" $name) "key" $key))) }}
+{{- end }}
+{{- $_ := set $out "env" (append $env (dict "name" "PGDATABASE" "value" $name)) }}
+{{- end }}
+{{- $containers = append $containers $out }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+  annotations:
+    # Roll pods when the synced secret or db creds change
+    reloader.stakater.com/auto: "true"
+  labels:
+    {{- include "notch.labels" . | nindent 4 }}
+spec:
+  replicas: {{ dig "deployment" "replicas" 1 $svc }}
+  selector:
+    matchLabels:
+      {{- include "notch.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notch.labels" . | nindent 8 }}
+    spec:
+      containers:
+        {{- toYaml $containers | nindent 8 }}

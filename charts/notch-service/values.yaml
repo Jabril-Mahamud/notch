@@ -1,0 +1,8 @@
+# Everything comes from services/<name>/service.yaml + <env>/values.yaml.
+service: {}
+
+# Platform-level names the chart points at; the objects live outside it.
+providerConfig: notch-shared-pg
+# Kubernetes-provider store reading from a central namespace. The source Secret
+# can't share the target's name and namespace, or ESO overwrites its own input.
+secretStore: notch-secrets

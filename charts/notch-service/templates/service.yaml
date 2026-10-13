@@ -1,0 +1,19 @@
+{{- with .Values.service.ports }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "notch.name" $ }}
+  namespace: {{ include "notch.name" $ }}
+  labels:
+    {{- include "notch.labels" $ | nindent 4 }}
+spec:
+  selector:
+    {{- include "notch.selector" $ | nindent 4 }}
+  ports:
+    {{- range . }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort | default .name }}
+      protocol: TCP
+    {{- end }}
+{{- end }}
