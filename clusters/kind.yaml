@@ -1,0 +1,29 @@
+# Root application for the local Kind cluster. Applied by scripts/kind-up.sh.
+# It is not managed by itself, so edits here need a re-apply.
+# addons/ lands in PR 3; until then this app sits OutOfSync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Jabril-Mahamud/notch.git
+    targetRevision: HEAD
+    path: addons
+    directory:
+      # Directory sources are non-recursive by default: subfolders never sync,
+      # yet the app still reports Synced.
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      # Addon CRs render before their CRDs exist on the first sync; skip the
+      # dry run rather than fail the whole wave.
+      - SkipDryRunOnMissingResource=true
+      # Big CRDs overflow the last-applied annotation with client-side apply.
+      - ServerSideApply=true
