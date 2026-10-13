@@ -1,0 +1,8 @@
+# Live checks against a running notch cluster (`notch up` first). Run via tests/e2e.sh.
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+  - tests/e2e
+# The cluster is notch's own; kuttl must not spin up a throwaway Kind.
+startKIND: false
+timeout: 600
