@@ -136,7 +136,9 @@ func TestWriteServiceRendersWithChart(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not installed")
 	}
-	for _, s := range []Service{{Name: "plain", Port: 3000}, {Name: "full", Port: 8000, Postgres: true, Secrets: []string{"A", "B"}}} {
+	mono := Service{Name: "mono", Postgres: true, Components: []Component{
+		{Name: "backend", Port: 8001, Path: "/api"}, {Name: "frontend", Port: 3001, Path: "/"}}}
+	for _, s := range []Service{{Name: "plain", Port: 3000}, {Name: "full", Port: 8000, Postgres: true, Secrets: []string{"A", "B"}}, mono} {
 		dir, err := WriteService(t.TempDir(), s)
 		if err != nil {
 			t.Fatal(err)
@@ -145,6 +147,26 @@ func TestWriteServiceRendersWithChart(t *testing.T) {
 			"-f", filepath.Join(dir, "service.yaml"), "-f", filepath.Join(dir, "local", "values.yaml")).CombinedOutput()
 		if err != nil {
 			t.Fatalf("%s: helm template: %v\n%s", s.Name, err, out)
+		}
+	}
+}
+
+func TestWriteServiceComponents(t *testing.T) {
+	dir, err := WriteService(t.TempDir(), Service{Name: "journal", Components: []Component{
+		{Name: "backend", Port: 8001, Path: "/api"}, {Name: "frontend", Port: 3001, Path: "/"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, _ := os.ReadFile(filepath.Join(dir, "service.yaml"))
+	vals, _ := os.ReadFile(filepath.Join(dir, "local", "values.yaml"))
+	for _, want := range []string{"name: http-backend", "path: /api", "targetPort: frontend", "containerPort: 3001", "value: \"8001\""} {
+		if !strings.Contains(string(svc), want) {
+			t.Errorf("service.yaml missing %q:\n%s", want, svc)
+		}
+	}
+	for _, want := range []string{"ref: journal-backend:local", "ref: journal-frontend:local"} {
+		if !strings.Contains(string(vals), want) {
+			t.Errorf("values.yaml missing %q:\n%s", want, vals)
 		}
 	}
 }

@@ -16,6 +16,7 @@ var (
 	addSecrets  []string
 	addPostgres bool
 	addName     string
+	addBuildArg []string
 )
 
 var addCmd = &cobra.Command{
@@ -33,6 +34,7 @@ func init() {
 	addCmd.Flags().StringArrayVar(&addSecrets, "secret", nil, "secret env var the service needs (repeatable); value is prompted")
 	addCmd.Flags().BoolVar(&addPostgres, "postgres", false, "provision a Postgres database for the service")
 	addCmd.Flags().StringVar(&addName, "name", "", "service name (default: from the repo name)")
+	addCmd.Flags().StringArrayVar(&addBuildArg, "build-arg", nil, "docker build arg, [component:]KEY=VALUE (repeatable), e.g. frontend:NEXT_PUBLIC_API_URL=/api")
 	rootCmd.AddCommand(addCmd)
 }
 
@@ -85,7 +87,7 @@ func buildWithSecrets(svc internal.Service, src string) error {
 	if err != nil {
 		return err
 	}
-	if err := internal.BuildAndLoad(svc.Name, src); err != nil {
+	if err := build(svc, src); err != nil {
 		return err
 	}
 	if len(svc.Secrets) == 0 {
@@ -106,6 +108,34 @@ func source(arg string) (string, func(), error) {
 	return dir, func() { os.RemoveAll(dir) }, nil
 }
 
+// build makes one image per component, or one for the whole repo.
+func build(svc internal.Service, src string) error {
+	args, err := internal.ParseBuildArgs(addBuildArg)
+	if err != nil {
+		return err
+	}
+	if len(svc.Components) == 0 {
+		return internal.BuildAndLoad(svc.Name, src, args[""])
+	}
+	known := map[string]bool{}
+	var names []string
+	for _, c := range svc.Components {
+		known[c.Name] = true
+		names = append(names, c.Name)
+	}
+	for comp := range args {
+		if !known[comp] {
+			return fmt.Errorf("--build-arg for %q, but the components are %v", comp, names)
+		}
+	}
+	for _, c := range svc.Components {
+		if err := internal.BuildAndLoad(svc.Name+"-"+c.Name, c.Dir, args[c.Name]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func describe(arg, src string) (internal.Service, error) {
 	name, err := internal.NameFrom(arg)
 	if addName != "" {
@@ -121,12 +151,19 @@ func describe(arg, src string) (internal.Service, error) {
 	if err != nil {
 		return internal.Service{}, err
 	}
+	// No root Dockerfile: a monorepo (frontend/ + backend/) or a Railpack build.
+	var comps []internal.Component
+	if !internal.HasDockerfile(src) {
+		if comps, err = internal.FindComponents(src); err != nil {
+			return internal.Service{}, err
+		}
+	}
 	for _, k := range addSecrets {
 		if !internal.ValidSecretKey(k) {
 			return internal.Service{}, fmt.Errorf("secret %q isn't a valid env var name", k)
 		}
 	}
-	return internal.Service{Name: name, Port: port, Postgres: addPostgres, Secrets: addSecrets}, nil
+	return internal.Service{Name: name, Port: port, Postgres: addPostgres, Secrets: addSecrets, Components: comps}, nil
 }
 
 // ponytail: input echoes. Swap in golang.org/x/term ReadPassword if that matters.
