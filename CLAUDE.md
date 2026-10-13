@@ -51,4 +51,4 @@ tests/                     ← helm lint, template assertions, kuttl
 ## Reference
 - Vault plan: `~/Documents/openclaw/Projects/k8/Notch/Notch.md`
 - Yalla reference (READ ONLY): `/mnt/hdd/projects/work/yalla/`
-- v1 repos (archived): `/mnt/hdd/projects/k8/notch/{notch-v1,notch-gitops-v1,notch-hello-v1}/`
+- v1 repos (archived on GitHub): `Jabril-Mahamud/notch`, `Jabril-Mahamud/notch-gitops`. `notch-hello-v1` still local at `/mnt/hdd/projects/k8/notch/notch-hello-v1/` (live test builds from it)
