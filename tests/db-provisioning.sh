@@ -1,117 +1,49 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Structural validation for PR 5: DB provisioning via Crossplane.
-# No cluster needed — validates YAML fields with yq and checks kind-up.sh syntax.
+# Assertions for the shared Postgres layer: addons/infra + the kind-up superuser secret.
+# Needs yq (the jq wrapper). Static only: never talks to a cluster.
 cd "$(dirname "$0")/.."
 
-INFRA=addons/infra
 FAILED=0
 
-# check <description> <file> <yq-expression>
-check() {
-  local desc=$1 file=$INFRA/$2 expr=$3
-  if yq -s -e "$expr" < "$file" >/dev/null 2>&1; then
-    echo "ok   $desc"
+docs() { # files... -> one YAML stream; a file without a leading --- would merge into the previous doc
+  awk 'FNR == 1 { print "---" } 1' "$@" 2>/dev/null || true
+}
+
+check() { # description jq-expression (must be true over the slurped docs)
+  if echo "$OUT" | yq -s -e "$2" >/dev/null 2>&1; then
+    echo "ok   $1"
   else
-    echo "FAIL $desc"; FAILED=1
+    echo "FAIL $1"; FAILED=1
   fi
 }
 
-# --- CNPG cluster ---
-CNPG=cnpg-cluster.yaml
-check "CNPG is kind Cluster" "$CNPG" '.[0].kind == "Cluster"'
-check "CNPG name is notch-pg" "$CNPG" '.[0].metadata.name == "notch-pg"'
-check "CNPG namespace is platform-db" "$CNPG" '.[0].metadata.namespace == "platform-db"'
-check "CNPG sync wave 5" "$CNPG" '.[0].metadata.annotations["argocd.argoproj.io/sync-wave"] == "5"'
-check "CNPG prune disabled" "$CNPG" '.[0].metadata.annotations["argocd.argoproj.io/sync-options"] == "Prune=false"'
-check "CNPG single instance" "$CNPG" '.[0].spec.instances == 1'
-check "CNPG superuser access enabled" "$CNPG" '.[0].spec.enableSuperuserAccess == true'
-check "CNPG superuser secret name" "$CNPG" '.[0].spec.superuserSecret.name == "notch-pg-superuser"'
-check "CNPG storage 1Gi" "$CNPG" '.[0].spec.storage.size == "1Gi"'
+# Step 1: CNPG cluster and provider config
+OUT=$(docs addons/infra/*.yaml)
+check "Cluster notch-pg in platform-db, 1 instance, 1Gi, default storage class" \
+  '.[] | select(.kind == "Cluster") | .metadata.name == "notch-pg" and .metadata.namespace == "platform-db" and .spec.instances == 1 and .spec.storage.size == "1Gi" and .spec.storage.storageClass == null'
+check "Cluster bootstraps from notch-pg-superuser" \
+  '.[] | select(.kind == "Cluster") | .spec.superuserSecret.name == "notch-pg-superuser" and .spec.enableSuperuserAccess == true'
+check "Cluster is wave 5 and never pruned" \
+  '.[] | select(.kind == "Cluster") | .metadata.annotations["argocd.argoproj.io/sync-wave"] == "5" and .metadata.annotations["argocd.argoproj.io/sync-options"] == "Prune=false"'
+check "ProviderConfig notch-shared-pg reads the superuser secret directly" \
+  '.[] | select(.kind == "ProviderConfig") | .apiVersion == "postgresql.sql.crossplane.io/v1alpha1" and .metadata.name == "notch-shared-pg" and .spec.credentials.connectionSecretRef == {"namespace":"platform-db","name":"notch-pg-superuser"}'
+check "ProviderConfig is wave 6" \
+  '.[] | select(.kind == "ProviderConfig") | .metadata.annotations["argocd.argoproj.io/sync-wave"] == "6"'
+check "no ExternalSecret: kind-up writes endpoint itself" \
+  'all(.[]; .kind != "ExternalSecret")'
 
-# --- ProviderConfig ---
-PC=pg-provider-config.yaml
-check "ProviderConfig kind" "$PC" '.[0].kind == "ProviderConfig"'
-check "ProviderConfig name notch-shared-pg" "$PC" '.[0].metadata.name == "notch-shared-pg"'
-check "ProviderConfig sync wave 6" "$PC" '.[0].metadata.annotations["argocd.argoproj.io/sync-wave"] == "6"'
-check "ProviderConfig connection secret name" "$PC" '.[0].spec.credentials.connectionSecretRef.name == "notch-pg-provider-config"'
-check "ProviderConfig connection secret namespace" "$PC" '.[0].spec.credentials.connectionSecretRef.namespace == "platform-db"'
-check "ProviderConfig sslMode require" "$PC" '.[0].spec.sslMode == "require"'
-check "ProviderConfig group is postgresql.sql.crossplane.io" "$PC" '.[0].apiVersion == "postgresql.sql.crossplane.io/v1alpha1"'
+# Step 2: one notch-shared-pg across all addons, or ArgoCD fights itself
+OUT=$(docs addons/*.yaml addons/infra/*.yaml)
+check "exactly one notch-shared-pg ProviderConfig" \
+  '[.[] | select(.kind == "ProviderConfig" and .metadata.name == "notch-shared-pg")] | length == 1'
 
-# --- ExternalSecret (host → endpoint rename) ---
-ES=pg-superuser-externalsecret.yaml
-check "ExternalSecret kind" "$ES" '.[0].kind == "ExternalSecret"'
-check "ExternalSecret name notch-pg-provider-config" "$ES" '.[0].metadata.name == "notch-pg-provider-config"'
-check "ExternalSecret namespace platform-db" "$ES" '.[0].metadata.namespace == "platform-db"'
-check "ExternalSecret sync wave 6" "$ES" '.[0].metadata.annotations["argocd.argoproj.io/sync-wave"] == "6"'
-check "ExternalSecret targets notch-pg-provider-config" "$ES" '.[0].spec.target.name == "notch-pg-provider-config"'
-check "ExternalSecret uses ClusterSecretStore" "$ES" '.[0].spec.secretStoreRef.kind == "ClusterSecretStore"'
-check "ExternalSecret store name notch-secrets" "$ES" '.[0].spec.secretStoreRef.name == "notch-secrets"'
-check "ExternalSecret renames host to endpoint" "$ES" \
-  '.[0].spec.data | any(.[]; .secretKey == "endpoint" and .remoteRef.property == "host")'
-check "ExternalSecret has port mapping" "$ES" \
-  '.[0].spec.data | any(.[]; .secretKey == "port" and .remoteRef.property == "port")'
-check "ExternalSecret has username mapping" "$ES" \
-  '.[0].spec.data | any(.[]; .secretKey == "username" and .remoteRef.property == "username")'
-check "ExternalSecret has password mapping" "$ES" \
-  '.[0].spec.data | any(.[]; .secretKey == "password" and .remoteRef.property == "password")'
-check "ExternalSecret has database mapping" "$ES" \
-  '.[0].spec.data | any(.[]; .secretKey == "database" and .remoteRef.property == "database")'
-check "ExternalSecret has sslmode mapping" "$ES" \
-  '.[0].spec.data | any(.[]; .secretKey == "sslmode" and .remoteRef.property == "sslmode")'
-
-# --- ClusterSecretStore ---
-SS=notch-secret-store.yaml
-check "ClusterSecretStore kind" "$SS" '.[0].kind == "ClusterSecretStore"'
-check "ClusterSecretStore name notch-secrets" "$SS" '.[0].metadata.name == "notch-secrets"'
-check "ClusterSecretStore sync wave 3" "$SS" '.[0].metadata.annotations["argocd.argoproj.io/sync-wave"] == "3"'
-check "ClusterSecretStore provider is kubernetes" "$SS" '.[0].spec.provider.kubernetes != null'
-check "ClusterSecretStore reads from platform-db" "$SS" '.[0].spec.provider.kubernetes.remoteRef.namespace == "platform-db"'
-check "ClusterSecretStore SA is external-secrets" "$SS" '.[0].spec.provider.kubernetes.auth.serviceAccount.name == "external-secrets"'
-
-# --- kind-up.sh ---
-if bash -n scripts/kind-up.sh 2>&1; then
-  echo "ok   kind-up.sh syntax valid"
-else
-  echo "FAIL kind-up.sh syntax error"; FAILED=1
-fi
-
-if grep -q "notch-pg-superuser" scripts/kind-up.sh; then
-  echo "ok   kind-up.sh creates notch-pg-superuser secret"
-else
-  echo "FAIL kind-up.sh missing notch-pg-superuser secret creation"; FAILED=1
-fi
-
-if grep -q "platform-db" scripts/kind-up.sh; then
-  echo "ok   kind-up.sh creates platform-db namespace"
-else
-  echo "FAIL kind-up.sh missing platform-db namespace creation"; FAILED=1
-fi
-
-# Guard: only create if missing (regenerating locks provider-sql out)
-if grep -q "get secret notch-pg-superuser" scripts/kind-up.sh; then
-  echo "ok   kind-up.sh guards against recreating secret"
-else
-  echo "FAIL kind-up.sh should check if secret exists before creating"; FAILED=1
-fi
-
-# --- Cross-file consistency ---
-# ProviderConfig references the ExternalSecret's target secret
-PC_SECRET=$(yq -r -s '.[0].spec.credentials.connectionSecretRef.name' < "$INFRA/pg-provider-config.yaml")
-ES_TARGET=$(yq -r -s '.[0].spec.target.name' < "$INFRA/pg-superuser-externalsecret.yaml")
-if [ "$PC_SECRET" = "$ES_TARGET" ]; then
-  echo "ok   ProviderConfig secret ref matches ExternalSecret target ($PC_SECRET)"
-else
-  echo "FAIL ProviderConfig references '$PC_SECRET' but ExternalSecret targets '$ES_TARGET'"; FAILED=1
-fi
-
-# CNPG superuser secret name matches what kind-up.sh creates
-CNPG_SECRET=$(yq -r -s '.[0].spec.superuserSecret.name' < "$INFRA/cnpg-cluster.yaml")
-if grep -q "create secret generic $CNPG_SECRET" scripts/kind-up.sh; then
-  echo "ok   kind-up.sh creates the secret CNPG expects ($CNPG_SECRET)"
-else
-  echo "FAIL kind-up.sh does not create $CNPG_SECRET which CNPG expects"; FAILED=1
-fi
+# Step 3: kind-up owns the superuser secret
+KIND_UP=scripts/kind-up.sh
+if bash -n "$KIND_UP"; then echo "ok   kind-up parses"; else echo "FAIL kind-up parses"; FAILED=1; fi
+for want in 'get secret notch-pg-superuser' \
+  'endpoint=notch-pg-rw.platform-db.svc.cluster.local' 'port=5432'; do
+  if grep -qF -- "$want" "$KIND_UP"; then echo "ok   kind-up has $want"; else echo "FAIL kind-up has $want"; FAILED=1; fi
+done
 
 exit $FAILED
