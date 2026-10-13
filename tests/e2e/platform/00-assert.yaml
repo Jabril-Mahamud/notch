@@ -1,0 +1,96 @@
+# Every addon synced and healthy, and the shared Postgres up.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ingress-nginx
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudnative-pg
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: reloader
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: notch-pg
+  namespace: platform-db
+status:
+  phase: Cluster in healthy state

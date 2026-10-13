@@ -24,3 +24,6 @@ docs/
 
 # Go
 bin/
+
+# kuttl writes the test kubeconfig to the working directory
+kubeconfig
