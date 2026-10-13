@@ -67,6 +67,10 @@ check "Role writes creds to <service>-db" \
   '.[] | select(.kind == "Role") | .spec.writeConnectionSecretToRef == {"name":"hello-db","namespace":"hello"}'
 check "sync waves under metadata.annotations" \
   '[.[] | select(.kind == "Namespace" or .kind == "ExternalSecret") | .metadata.annotations["argocd.argoproj.io/sync-wave"]] | all(. != null)'
+check "every container exports traces to Tempo over OTLP/HTTP" \
+  '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "OTEL_EXPORTER_OTLP_ENDPOINT" and .value == "http://tempo.tempo.svc:4318")'
+check "trace service name is the service name" \
+  '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "OTEL_SERVICE_NAME" and .value == "hello")'
 
 # Step 2: two containers, path split
 OUT=$(render web)
@@ -76,6 +80,8 @@ check "ingress splits by path" \
   '.[] | select(.kind == "Ingress") | [.spec.rules[0].http.paths[] | [.path, .backend.service.port.name]] == [["/","http-frontend"],["/api","http-backend"]]'
 check "service targets named container ports" \
   '.[] | select(.kind == "Service") | [.spec.ports[].targetPort] == ["frontend","backend"]'
+check "OTel env reaches containers without postgres too" \
+  '[.[] | select(.kind == "Deployment") | .spec.template.spec.containers[].env | any(.name == "OTEL_SERVICE_NAME")] | all'
 check "explicit probe kept" \
   '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].readinessProbe.httpGet.path == "/health"'
 check "no postgres, no secrets: no Database or ExternalSecret" \

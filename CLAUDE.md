@@ -1,7 +1,7 @@
 # Notch — repo guidelines
 
 ## What this is
-A self-hosted k8s deployment platform. Point it at a repo, it ships. Built on ArgoCD, Crossplane, CloudNativePG, ExternalSecrets, ingress-nginx, kube-prometheus-stack, and Loki.
+A self-hosted k8s deployment platform. Point it at a repo, it ships. Built on ArgoCD, Crossplane, CloudNativePG, ExternalSecrets, ingress-nginx, kube-prometheus-stack, Loki, and Tempo.
 
 ## Vocabulary (mirrors Yalla)
 - **Platform** — top-level grouping, has addons + cluster config (`platform.yaml`)
