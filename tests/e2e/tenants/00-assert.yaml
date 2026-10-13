@@ -1,0 +1,34 @@
+# Both tenants rendered by the tenants ApplicationSet.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tenant-team-alpha
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tenant-team-beta
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+# RBAC: the deployer edits its own namespace, nothing else, and can't widen its
+# own access. `can-i` exits 1 on "no", hence the `!`.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      AS=--as=system:serviceaccount:team-alpha:team-alpha-deployer
+      kubectl auth can-i create deployments -n team-alpha $AS
+      ! kubectl auth can-i create deployments -n team-beta $AS
+      ! kubectl auth can-i create rolebindings -n team-alpha $AS
+      ! kubectl auth can-i create namespaces $AS

@@ -1,0 +1,39 @@
+# One Application per tenants/<name>/, rendered through charts/notch-tenant:
+# namespace, RBAC, quotas, network policies. No DB dependency, but wave 7 like
+# services so tenants land on a fully built platform.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tenants
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "7"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/Jabril-Mahamud/notch.git
+        # notch tenant create pushes to dev; main only moves on phase releases
+        revision: dev
+        directories:
+          - path: tenants/*
+  template:
+    metadata:
+      name: "tenant-{{.path.basename}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/Jabril-Mahamud/notch.git
+        targetRevision: dev
+        path: charts/notch-tenant
+        helm:
+          valueFiles:
+            - ../../tenants/{{.path.basename}}/platform.yaml
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.path.basename}}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - ServerSideApply=true
