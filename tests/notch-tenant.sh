@@ -32,6 +32,19 @@ check "binding subject is the deployer" \
 check "nothing cluster-scoped besides the namespace" \
   'all(.[]; .kind == "Namespace" or .metadata.namespace == "team-alpha")'
 
+# Step 2: quotas
+check "ResourceQuota caps requests, memory limits and object counts" \
+  '.[] | select(.kind == "ResourceQuota") | .spec.hard | has("requests.cpu") and has("requests.memory") and has("limits.memory") and has("pods")'
+check "no LoadBalancer or NodePort services (Kind has no LB; ingress is the way in)" \
+  '.[] | select(.kind == "ResourceQuota") | .spec.hard["services.loadbalancers"] == "0" and .spec.hard["services.nodeports"] == "0"'
+check "LimitRange defaults every container (quota rejects pods without them)" \
+  '.[] | select(.kind == "LimitRange") | .spec.limits[0] | .type == "Container" and .defaultRequest.cpu and .defaultRequest.memory and .default.memory'
+check "no CPU limit default (throttling, not protection)" \
+  '.[] | select(.kind == "LimitRange") | .spec.limits[0].default | has("cpu") | not'
+OUT=$(helm template team-alpha "$CHART" -f tenants/team-alpha/platform.yaml --set tenant.quota.pods=3 2>/dev/null || true)
+check "platform.yaml overrides a single quota key, keeps the rest" \
+  '.[] | select(.kind == "ResourceQuota") | .spec.hard.pods == "3" and .spec.hard["requests.cpu"] != null'
+
 # The ApplicationSet that renders tenants/*
 OUT=$(cat addons/tenants.yaml 2>/dev/null || true)
 check "tenants ApplicationSet over tenants/* on dev" \
