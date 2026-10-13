@@ -53,9 +53,23 @@ func TestIsRemote(t *testing.T) {
 	}
 }
 
-func TestDetectPortNeedsDockerfile(t *testing.T) {
-	if _, err := DetectPort(t.TempDir()); err == nil {
-		t.Error("want error without Dockerfile")
+// Starters off GitHub often ship no Dockerfile: the stack still picks the port.
+func TestDetectPortWithoutDockerfile(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "package.json", "{}")
+	if p, err := DetectPort(dir); p != 3000 || err != nil {
+		t.Errorf("port = %d, %v; want 3000", p, err)
+	}
+}
+
+func TestHasDockerfile(t *testing.T) {
+	dir := t.TempDir()
+	if HasDockerfile(dir) {
+		t.Error("empty dir has no Dockerfile")
+	}
+	write(t, dir, "Dockerfile", "FROM scratch\n")
+	if !HasDockerfile(dir) {
+		t.Error("want Dockerfile found")
 	}
 }
 
@@ -93,7 +107,8 @@ func TestWriteService(t *testing.T) {
 	}
 	svc, _ := os.ReadFile(filepath.Join(dir, "service.yaml"))
 	vals, _ := os.ReadFile(filepath.Join(dir, "local", "values.yaml"))
-	for _, want := range []string{"name: hello", "port: 8000", "postgres: true", "- APP_JWT_SECRET"} {
+	// PORT: buildpack-style starters listen on $PORT, not a fixed port.
+	for _, want := range []string{"name: hello", "port: 8000", "postgres: true", "- APP_JWT_SECRET", "- name: PORT\n            value: \"8000\""} {
 		if !strings.Contains(string(svc), want) {
 			t.Errorf("service.yaml missing %q:\n%s", want, svc)
 		}
