@@ -1,0 +1,6 @@
+# CLI dependencies beyond go/kubectl/helm/kind/docker. `mise install` once.
+[tools]
+# notch add builds repos without a Dockerfile with it; keep the frontend tag in
+# cmd/notch/internal/image.go in step.
+"github:railwayapp/railpack" = "0.40.1"
+kuttl = "0.27.0"

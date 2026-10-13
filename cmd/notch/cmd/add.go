@@ -15,18 +15,24 @@ import (
 var (
 	addSecrets  []string
 	addPostgres bool
+	addName     string
 )
 
 var addCmd = &cobra.Command{
 	Use:   "add <repo-or-path>",
-	Short: "Build a repo, load it into Kind and deploy it as a service",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runAdd,
+	Short: "Build a repo (Dockerfile or auto-detected), load it into Kind and deploy it as a service",
+	Long: `Build a repo (Dockerfile or auto-detected), load it into Kind and deploy it as a service.
+
+Rerunning on an existing service rebuilds and reloads its image, e.g. after
+notch down/up. Pass --secret again to recreate secrets on a fresh cluster.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runAdd,
 }
 
 func init() {
 	addCmd.Flags().StringArrayVar(&addSecrets, "secret", nil, "secret env var the service needs (repeatable); value is prompted")
 	addCmd.Flags().BoolVar(&addPostgres, "postgres", false, "provision a Postgres database for the service")
+	addCmd.Flags().StringVar(&addName, "name", "", "service name (default: from the repo name)")
 	rootCmd.AddCommand(addCmd)
 }
 
@@ -56,15 +62,20 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if err := internal.BuildAndLoad(svc.Name, src); err != nil {
 		return err
 	}
-	if _, err := internal.WriteService(root, svc); err != nil {
-		return err
-	}
 	if len(svc.Secrets) > 0 {
 		if err := internal.CreateSecret(svc.Name, svc.Secrets, values); err != nil {
 			return err
 		}
 	}
-	if err := internal.Publish(root, filepath.Join("services", svc.Name), "feat: add "+svc.Name+" service"); err != nil {
+	dir := filepath.Join("services", svc.Name)
+	if _, err := os.Stat(filepath.Join(root, dir)); err == nil {
+		fmt.Printf("service %s exists, image rebuilt and loaded\n", svc.Name)
+		return nil
+	}
+	if _, err := internal.WriteService(root, svc); err != nil {
+		return err
+	}
+	if err := internal.Publish(root, dir, "feat: add "+svc.Name+" service"); err != nil {
 		return err
 	}
 	fmt.Printf("service %s deploying, run `notch list` to check status\n", svc.Name)
@@ -85,6 +96,12 @@ func source(arg string) (string, func(), error) {
 
 func describe(arg, src string) (internal.Service, error) {
 	name, err := internal.NameFrom(arg)
+	if addName != "" {
+		name, err = addName, nil
+		if !internal.ValidName(name) {
+			err = fmt.Errorf("%q isn't a valid service name (lowercase letters, digits, dashes)", name)
+		}
+	}
 	if err != nil {
 		return internal.Service{}, err
 	}
