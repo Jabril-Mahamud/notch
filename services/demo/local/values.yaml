@@ -1,0 +1,13 @@
+service:
+  endpoints:
+    internal:
+      hosts:
+        - demo.notch.localhost:8080
+  deployment:
+    containers:
+      backend:
+        image:
+          ref: demo-backend:local
+      frontend:
+        image:
+          ref: demo-frontend:local
