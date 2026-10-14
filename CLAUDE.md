@@ -1,7 +1,7 @@
 # Notch — repo guidelines
 
 ## What this is
-A self-hosted k8s deployment platform. Point it at a repo (or `notch new` one), it ships. Built on ArgoCD, cert-manager, Crossplane, CloudNativePG, ExternalSecrets, ingress-nginx, kube-prometheus-stack, Loki, Tempo, and Railpack. Local Kind only for now.
+A self-hosted k8s deployment platform. Point it at a repo (or `notch new` one), it ships. Built on ArgoCD, Keycloak, cert-manager, Crossplane, CloudNativePG, ExternalSecrets, ingress-nginx, kube-prometheus-stack, Loki, Tempo, and Railpack. Local Kind only for now.
 
 ## Vocabulary (mirrors Yalla)
 - **Platform** — top-level grouping, has addons + cluster config (`platform.yaml`)
@@ -20,6 +20,7 @@ addons/                       ← one ArgoCD Application per addon, sync-waved
   tenants.yaml                ← ApplicationSet: tenants/* → charts/notch-tenant
   tenant-services.yaml        ← ApplicationSet: tenants/*/services/* into the tenant ns
   notch-postgres/             ← NotchPostgres XRD + CNPG Composition (services claim a DB)
+  keycloak/                   ← OIDC provider: notch realm (groups, users, clients)
 services/<name>/              ← service.yaml + local/values.yaml (written by notch add)
 tenants/<team>/               ← platform.yaml (+ services/<svc>/)
 charts/notch-service/         ← renders a service (Deployment, Ingress, DB, ExternalSecret)
@@ -27,6 +28,7 @@ charts/notch-tenant/          ← renders a tenant (ns, RBAC, quota, netpol)
 cmd/notch/                    ← the CLI (cobra); internal/templates/ = notch new starter
 scripts/kind-up.sh            ← cluster bring-up (notch up): registry, auth config, kind, ArgoCD
 kind.yaml                     ← node config; changes mean recreating the cluster
+clusters/argocd-values.yaml   ← ArgoCD bootstrap values (OIDC, RBAC, ingress), applied by kind-up
 tests/*.sh                    ← static helm/yq assertions; tests/e2e/ = kuttl (live)
 mise.toml                     ← railpack + kuttl versions
 .claude/gotchas.md            ← what broke (gitignored)
@@ -74,6 +76,8 @@ mise.toml                     ← railpack + kuttl versions
 9. The apiserver reads a structured AuthenticationConfiguration from `~/.config/notch/auth/config.yaml` (mounted by kind.yaml) and reloads it live: OIDC changes there, not in kind.yaml
 10. Every service Ingress has TLS, so ingress-nginx 308s `http://...:8080` to https: test with `curl --cacert ~/.config/notch/ca/ca.crt https://<host>/`, not plain http (`curl -sf` on a 308 passes vacuously)
 11. Services get Postgres via a namespaced `NotchPostgres` claim (addons/notch-postgres); composed names are generated, so `crossplane.io/external-name` carries the real DB/role name. A recreated `<service>-db` needs Reloader's `reloadOnCreate`, or pods keep a dead password
+12. `*.notch.localhost` is `::1` off the host: kind-up rewrites it in CoreDNS (pods) and pins `keycloak.notch.localhost` in the node's /etc/hosts (apiserver). Docker resets /etc/hosts on start, so `notch resume` reruns kind-up. curl pins `*.localhost` to loopback itself: probe with `nslookup` + `--resolve`
+13. The Keycloak realm is re-imported on every start: users need fixed `id`s, or `sub` changes and Grafana can't match its users. Roles come from groups only (`oidc:` prefix on the apiserver)
 
 ## Reference
 - Vault plan: `~/Documents/openclaw/Projects/k8/Notch/Notch.md`
