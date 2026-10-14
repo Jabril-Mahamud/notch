@@ -1,0 +1,34 @@
+# App OIDC: demo has auth: true, so it has a confidential Keycloak client
+# (scripts/app-clients.sh, rerun by notch up), every container gets OIDC_*, and
+# the secret its pods see is the one Keycloak holds (notch-secrets -> ESO).
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      kc() { # kcadm args... -> run in the Keycloak pod as the bootstrap admin
+        kubectl -n keycloak exec deploy/keycloak -- sh -c '
+          kc() { /opt/keycloak/bin/kcadm.sh "$@" --config /tmp/kcadm-e2e.config; }
+          kc config credentials --server http://localhost:8080 --realm master \
+            --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" >/dev/null 2>&1
+          kc "$@"' sh "$@"
+      }
+      CLIENT=$(kc get clients -r notch -q clientId=demo)
+      echo "$CLIENT" | python3 -c '
+      import sys, json
+      [c] = json.load(sys.stdin)
+      assert c["publicClient"] is False and c["standardFlowEnabled"] is True, c
+      assert c["directAccessGrantsEnabled"] is False and c["serviceAccountsEnabled"] is False, c
+      assert "https://demo.notch.localhost/*" in c["redirectUris"], c["redirectUris"]
+      assert any(m["protocolMapper"] == "oidc-group-membership-mapper" for m in c["protocolMappers"]), c'
+      kubectl -n demo get deploy demo -o json | python3 -c '
+      import sys, json
+      for c in json.load(sys.stdin)["spec"]["template"]["spec"]["containers"]:
+          env = {e["name"]: e for e in c["env"]}
+          assert env["OIDC_ISSUER"]["value"] == "https://keycloak.notch.localhost/realms/notch", c["name"]
+          assert env["OIDC_CLIENT_ID"]["value"] == "demo", c["name"]
+          assert env["OIDC_CLIENT_SECRET"]["valueFrom"]["secretKeyRef"]["name"] == "demo-secrets", c["name"]'
+      UUID=$(echo "$CLIENT" | python3 -c 'import sys,json; print(json.load(sys.stdin)[0]["id"])')
+      WANT=$(kc get "clients/$UUID/client-secret" -r notch | python3 -c 'import sys,json; print(json.load(sys.stdin)["value"])')
+      GOT=$(kubectl -n demo get secret demo-secrets -o jsonpath='{.data.OIDC_CLIENT_SECRET}' | base64 -d)
+      [ -n "$GOT" ] && [ "$GOT" = "$WANT" ]
