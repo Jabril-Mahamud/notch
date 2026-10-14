@@ -4,3 +4,6 @@
 # cmd/notch/internal/image.go in step.
 "github:railwayapp/railpack" = "0.40.1"
 kuttl = "0.27.0"
+# tests/notch-postgres.sh renders the NotchPostgres composition with it (2.x CLI
+# renders the 1.x-style composition fine; the cluster runs Crossplane 1.20).
+"aqua:crossplane/cli" = "2.5.0"

@@ -1,0 +1,8 @@
+# What Crossplane makes from the chart's claim for team-alpha's hello.
+apiVersion: notch.dev/v1alpha1
+kind: XNotchPostgres
+metadata:
+  name: hello-x7k2p
+  uid: 1b2c3d4e-0000-0000-0000-000000000000
+spec:
+  databaseName: team-alpha-hello

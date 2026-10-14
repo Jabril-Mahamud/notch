@@ -36,11 +36,11 @@ helm lint "$CHART" -f "$FIX/hello/service.yaml" -f "$FIX/hello/local/values.yaml
 
 # Step 1: single container, brief's example
 OUT=$(render hello)
-for k in Namespace Deployment Service Ingress ExternalSecret Database Role; do
+for k in Namespace Deployment Service Ingress ExternalSecret NotchPostgres; do
   check "hello renders $k" "any(.[]; .kind == \"$k\")"
 done
 check "namespaced objects land in hello" \
-  '[.[] | select(.kind != "Namespace" and .kind != "Database" and .kind != "Role") | .metadata.namespace] | all(. == "hello")'
+  '[.[] | select(.kind != "Namespace") | .metadata.namespace] | all(. == "hello")'
 check "every object labelled name + managed-by" \
   'all(.[]; .metadata.labels["app.kubernetes.io/name"] == "hello" and .metadata.labels["app.kubernetes.io/managed-by"] == "notch")'
 check "no instance label in any selector" \
@@ -65,10 +65,14 @@ check "single port routes /" \
   '.[] | select(.kind == "Ingress") | .spec.rules[0].http.paths == [{"path":"/","pathType":"Prefix","backend":{"service":{"name":"hello","port":{"name":"http"}}}}]'
 check "ExternalSecret pulls each listed key from <service>-secrets" \
   '.[] | select(.kind == "ExternalSecret") | .spec.data == [{"secretKey":"APP_JWT_SECRET","remoteRef":{"key":"hello-secrets","property":"APP_JWT_SECRET"}}]'
-check "Database and Role use the shared provider config" \
-  '[.[] | select(.kind == "Database" or .kind == "Role") | .spec.providerConfigRef.name] == ["notch-shared-pg","notch-shared-pg"]'
-check "Role writes creds to <service>-db" \
-  '.[] | select(.kind == "Role") | .spec.writeConnectionSecretToRef == {"name":"hello-db","namespace":"hello"}'
+check "postgres is a NotchPostgres claim, not raw provider-sql resources" \
+  'all(.[]; .kind != "Database" and .kind != "Role") and ([.[] | select(.kind == "NotchPostgres") | .apiVersion] == ["notch.dev/v1alpha1"])'
+check "claim names the database after the service" \
+  '.[] | select(.kind == "NotchPostgres") | .metadata.name == "hello" and .spec.databaseName == "hello"'
+check "claim writes creds to <service>-db in the service namespace" \
+  '.[] | select(.kind == "NotchPostgres") | .spec.writeConnectionSecretToRef == {"name":"hello-db"}'
+check "claim before the Deployment (negative sync wave)" \
+  '.[] | select(.kind == "NotchPostgres") | .metadata.annotations["argocd.argoproj.io/sync-wave"] == "-1"'
 check "sync waves under metadata.annotations" \
   '[.[] | select(.kind == "Namespace" or .kind == "ExternalSecret") | .metadata.annotations["argocd.argoproj.io/sync-wave"]] | all(. != null)'
 check "every container exports traces to Tempo over OTLP/HTTP" \
@@ -98,11 +102,11 @@ OUT=$(helm template hello "$CHART" -f "$FIX/hello/service.yaml" -f "$FIX/hello/l
 check "tenant service renders no Namespace" \
   'all(.[]; .kind != "Namespace")'
 check "namespaced objects land in the tenant namespace" \
-  '[.[] | select(.kind != "Database" and .kind != "Role") | .metadata.namespace] | all(. == "team-alpha")'
-check "Database and Role prefixed with the tenant" \
-  '[.[] | select(.kind == "Database" or .kind == "Role") | .metadata.name] | all(. == "team-alpha-hello")'
-check "db creds written into the tenant namespace" \
-  '.[] | select(.kind == "Role") | .spec.writeConnectionSecretToRef == {"name":"hello-db","namespace":"team-alpha"}'
+  '[.[] | .metadata.namespace] | all(. == "team-alpha")'
+check "database name prefixed with the tenant (Postgres is shared)" \
+  '.[] | select(.kind == "NotchPostgres") | .spec.databaseName == "team-alpha-hello"'
+check "db claim lives in the tenant namespace (creds land next to it)" \
+  '.[] | select(.kind == "NotchPostgres") | .metadata.namespace == "team-alpha"'
 check "PGDATABASE is the prefixed database" \
   '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "PGDATABASE" and .value == "team-alpha-hello")'
 check "source secret prefixed in notch-secrets" \
@@ -120,8 +124,8 @@ check "OTel env reaches containers without postgres too" \
   '[.[] | select(.kind == "Deployment") | .spec.template.spec.containers[].env | any(.name == "OTEL_SERVICE_NAME")] | all'
 check "explicit probe kept" \
   '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].readinessProbe.httpGet.path == "/health"'
-check "no postgres, no secrets: no Database or ExternalSecret" \
-  'all(.[]; .kind != "Database" and .kind != "ExternalSecret" and .kind != "Role")'
+check "no postgres, no secrets: no NotchPostgres or ExternalSecret" \
+  'all(.[]; .kind != "NotchPostgres" and .kind != "ExternalSecret")'
 
 # Step 3: guard rails
 must_fail "duplicate port names across containers" "used by more than one container" \
