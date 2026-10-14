@@ -11,6 +11,12 @@ spec:
     repoURL: https://stakater.github.io/stakater-charts
     chart: reloader
     targetRevision: "2.2.18"
+    helm:
+      valuesObject:
+        reloader:
+          # Secrets get recreated, not just updated: a NotchPostgres claim
+          # replacing <service>-db left pods on a dropped role's password.
+          reloadOnCreate: true
   destination:
     server: https://kubernetes.default.svc
     namespace: reloader
