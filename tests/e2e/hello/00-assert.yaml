@@ -22,6 +22,12 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 # Conditions are lists, which kuttl matches whole; kubectl wait checks one entry.
 commands:
+  # Pulled from notch-registry, not side-loaded: readyReplicas above proves the pull worked.
+  - script: |
+      set -e
+      IMAGES=$(kubectl -n hello get deploy hello -o jsonpath='{.spec.template.spec.containers[*].image}')
+      [ -n "$IMAGES" ]
+      for i in $IMAGES; do case $i in localhost:5001/*) ;; *) echo "not from the registry: $i"; exit 1 ;; esac; done
   - command: kubectl wait --for=condition=Ready database.postgresql.sql.crossplane.io/hello --timeout=10s
   - command: kubectl -n hello wait --for=condition=Ready externalsecret/hello-secrets --timeout=10s
   - command: curl -sf http://hello.notch.localhost:8080/

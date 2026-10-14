@@ -23,6 +23,12 @@ status:
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 commands:
+  # Pulled from notch-registry, not side-loaded: readyReplicas above proves the pull worked.
+  - script: |
+      set -e
+      IMAGES=$(kubectl -n demo get deploy demo -o jsonpath='{.spec.template.spec.containers[*].image}')
+      [ -n "$IMAGES" ]
+      for i in $IMAGES; do case $i in localhost:5001/*) ;; *) echo "not from the registry: $i"; exit 1 ;; esac; done
   - script: |
       set -e
       H=http://demo.notch.localhost:8080
