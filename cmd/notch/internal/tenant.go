@@ -39,15 +39,22 @@ func WaitForTenant(name string) error {
 	return fmt.Errorf("serviceaccount %s/%s didn't appear in 5m: check `notch list`", name, sa)
 }
 
-// TenantKubeconfig mints a token for the tenant's deployer and wraps it with
-// the notch cluster's server and CA.
-// ponytail: 24h TokenRequest token, so rerunning `notch tenant create` is the
-// refresh. Switch to client certs or OIDC (Phase 4) for long-lived access.
-func TenantKubeconfig(name string) (string, error) {
-	token, err := KubectlOutput("-n", name, "create", "token", name+"-deployer", "--duration=24h")
-	if err != nil {
-		return "", err
+// Issuer is Keycloak's notch realm; the apiserver (kind-up.sh), ArgoCD and
+// Grafana all verify tokens against this exact URL.
+const Issuer = "https://keycloak.notch.localhost/realms/notch"
+
+// NotchHome holds the CA and Keycloak creds kind-up.sh generates.
+func NotchHome() string {
+	if h := os.Getenv("NOTCH_HOME"); h != "" {
+		return h
 	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "notch")
+}
+
+// TenantKubeconfig points kubectl at the notch cluster as whoever logs in to
+// Keycloak: RBAC comes from their groups (oidc:<tenant>), not a minted token.
+func TenantKubeconfig(name string) (string, error) {
 	server, err := KubectlOutput("config", "view", "--raw", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
 	if err != nil {
 		return "", err
@@ -56,11 +63,13 @@ func TenantKubeconfig(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return Kubeconfig(name, server, ca, token), nil
+	return Kubeconfig(name, server, ca, filepath.Join(NotchHome(), "ca", "ca.crt")), nil
 }
 
-// Kubeconfig renders a single-context kubeconfig defaulting to the tenant's namespace.
-func Kubeconfig(name, server, ca, token string) string {
+// Kubeconfig renders a single-context kubeconfig defaulting to the tenant's
+// namespace. kubelogin runs the browser login and caches the token; notchCA
+// verifies Keycloak's cert.
+func Kubeconfig(name, server, ca, notchCA string) string {
 	return fmt.Sprintf(`apiVersion: v1
 kind: Config
 clusters:
@@ -69,15 +78,24 @@ clusters:
     server: %[2]s
     certificate-authority-data: %[3]s
 users:
-- name: %[1]s-deployer
+- name: oidc
   user:
-    token: %[4]s
+    exec:
+      apiVersion: client.authentication.k8s.io/v1
+      command: kubelogin
+      args:
+      - get-token
+      - --oidc-issuer-url=%[5]s
+      - --oidc-client-id=kubernetes
+      - --oidc-extra-scope=email
+      - --certificate-authority=%[4]s
+      interactiveMode: IfAvailable
 contexts:
 - name: notch-%[1]s
   context:
     cluster: notch
-    user: %[1]s-deployer
+    user: oidc
     namespace: %[1]s
 current-context: notch-%[1]s
-`, name, server, ca, token)
+`, name, server, ca, notchCA, Issuer)
 }

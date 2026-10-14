@@ -28,7 +28,9 @@ check "deployer ServiceAccount in the tenant namespace" \
 check "RoleBinding (not ClusterRoleBinding) to the built-in edit role" \
   '.[] | select(.kind == "RoleBinding") | .metadata.namespace == "team-alpha" and .roleRef == {"apiGroup":"rbac.authorization.k8s.io","kind":"ClusterRole","name":"edit"}'
 check "binding subject is the deployer" \
-  '.[] | select(.kind == "RoleBinding") | .subjects == [{"kind":"ServiceAccount","name":"team-alpha-deployer","namespace":"team-alpha"}]'
+  '.[] | select(.kind == "RoleBinding") | .subjects | any(. == {"kind":"ServiceAccount","name":"team-alpha-deployer","namespace":"team-alpha"})'
+check "people in the tenant's Keycloak group get the same edit role" \
+  '.[] | select(.kind == "RoleBinding") | .subjects | any(. == {"kind":"Group","name":"oidc:team-alpha","apiGroup":"rbac.authorization.k8s.io"})'
 check "nothing cluster-scoped besides the namespace" \
   'all(.[]; .kind == "Namespace" or .metadata.namespace == "team-alpha")'
 

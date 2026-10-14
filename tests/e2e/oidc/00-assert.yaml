@@ -1,0 +1,27 @@
+# kubectl over OIDC: a Keycloak id_token is accepted by the apiserver, and RBAC
+# follows the token's groups (notch-admins = cluster-admin, team-* = edit in
+# that tenant only). Uses a bare kubeconfig: the admin cert would win otherwise.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      CA="${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt"
+      ISSUER=https://keycloak.notch.localhost/realms/notch
+      PW=$(kubectl -n keycloak get secret keycloak-secrets -o jsonpath='{.data.NOTCH_USER_PASSWORD}' | base64 -d)
+      SERVER=$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}')
+      KCA=$(mktemp); trap 'rm -f "$KCA"' EXIT
+      kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > "$KCA"
+      as() { # user kubectl-args... -> kubectl with only that user's id_token
+        local u=$1; shift
+        TOKEN=$(curl -sf --cacert "$CA" "$ISSUER/protocol/openid-connect/token" \
+          -d grant_type=password -d client_id=kubernetes -d scope=openid -d username="$u" -d password="$PW" |
+          python3 -c 'import sys,json; print(json.load(sys.stdin)["id_token"])')
+        kubectl --kubeconfig=/dev/null --server="$SERVER" --certificate-authority="$KCA" --token="$TOKEN" "$@"
+      }
+      as alice auth whoami -o jsonpath='{.status.userInfo.username} {.status.userInfo.groups}' | grep -q '^oidc:alice@notch.localhost .*oidc:team-alpha'
+      as alice auth can-i create deployments -n team-alpha
+      if as alice auth can-i create deployments -n team-beta; then exit 1; fi
+      if as alice auth can-i get secrets -n kube-system; then exit 1; fi
+      as bob auth can-i create deployments -n team-beta
+      as jabril auth can-i '*' '*' --all-namespaces

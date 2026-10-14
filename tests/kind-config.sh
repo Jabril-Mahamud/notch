@@ -54,4 +54,16 @@ grep_check "kind-up points the node (apiserver) at the ingress for keycloak.notc
 grep_check "notch resume reruns kind-up (docker start resets /etc/hosts)" \
   'func Resume\(root string\)' cmd/notch/internal/kind.go
 
+# OIDC: kind-up writes the apiserver's JWT authenticator (reloaded live).
+grep_check "apiserver trusts the Keycloak notch realm" \
+  'url: https://keycloak\.notch\.localhost/realms/notch' scripts/kind-up.sh
+grep_check "tokens must be for the kubernetes client" 'audiences: \[kubernetes\]' scripts/kind-up.sh
+grep_check "users and groups get an oidc: prefix (can't collide with system:)" \
+  'groups: \{ claim: groups, prefix: "oidc:" \}' scripts/kind-up.sh
+grep_check "CA is written before the auth config that embeds it" \
+  '.' <(awk '/ca\/ca\.crt" \]/ {ca=NR} /AuthenticationConfiguration/ {auth=NR} END {if (ca && auth && ca < auth) print "ordered"}' scripts/kind-up.sh)
+OUT=$(cat addons/oidc-rbac.yaml 2>/dev/null || true)
+check "notch-admins group is cluster-admin" \
+  '.kind == "ClusterRoleBinding" and .roleRef.name == "cluster-admin" and .subjects == [{"kind":"Group","name":"oidc:notch-admins","apiGroup":"rbac.authorization.k8s.io"}]'
+
 exit $FAILED

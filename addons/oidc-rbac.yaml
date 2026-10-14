@@ -1,0 +1,17 @@
+# Platform admins come from Keycloak's notch-admins group (see addons/keycloak).
+# Tenant groups are bound per namespace by charts/notch-tenant instead.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oidc-notch-admins
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  # oidc: prefix comes from the apiserver's claimMappings (kind-up.sh)
+  - kind: Group
+    name: oidc:notch-admins
+    apiGroup: rbac.authorization.k8s.io

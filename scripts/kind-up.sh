@@ -15,23 +15,38 @@ docker inspect "$REGISTRY" >/dev/null 2>&1 ||
   docker run -d --restart=always -p 127.0.0.1:5001:5000 --name "$REGISTRY" registry:2 >/dev/null
 docker start "$REGISTRY" >/dev/null
 
-# Step 2: apiserver auth config. Must exist before the apiserver starts; an empty
-# jwt list = no OIDC yet. Edits are picked up live (structured auth config).
-mkdir -p "$NOTCH_HOME/auth"
-[ -f "$NOTCH_HOME/auth/config.yaml" ] || cat > "$NOTCH_HOME/auth/config.yaml" <<EOF
-apiVersion: apiserver.config.k8s.io/v1
-kind: AuthenticationConfiguration
-jwt: []
-EOF
-
-# Step 3: local CA for TLS (cert-manager's notch-ca issuer) and, later, OIDC.
-# Kept across notch down/up so it only has to be trusted once.
+# Step 2: local CA for TLS (cert-manager's notch-ca issuer) and OIDC (the
+# apiserver trusts Keycloak's cert through it). Kept across notch down/up so it
+# only has to be trusted once.
 if [ ! -f "$NOTCH_HOME/ca/ca.crt" ]; then
   mkdir -p "$NOTCH_HOME/ca" && chmod 700 "$NOTCH_HOME/ca"
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 \
     -subj "/CN=notch local CA" -keyout "$NOTCH_HOME/ca/ca.key" -out "$NOTCH_HOME/ca/ca.crt" \
     -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign 2>/dev/null
 fi
+
+# Step 3: apiserver auth config: kubectl logs in through Keycloak. Rewritten on
+# every run and reloaded live by the apiserver (structured auth config), so no
+# cluster recreate. Usernames are emails, prefixed oidc: like groups, so a
+# Keycloak group can never pose as a system: one.
+[ -f "$NOTCH_HOME/ca/ca.crt" ] || { echo "no CA at $NOTCH_HOME/ca/ca.crt" >&2; exit 1; }
+mkdir -p "$NOTCH_HOME/auth"
+# Write then rename: the apiserver watches the file, and a truncate-then-write
+# lets it read an empty config ("empty config data").
+cat > "$NOTCH_HOME/auth/config.yaml.tmp" <<EOF
+apiVersion: apiserver.config.k8s.io/v1
+kind: AuthenticationConfiguration
+jwt:
+  - issuer:
+      url: https://keycloak.notch.localhost/realms/notch
+      audiences: [kubernetes]
+      certificateAuthority: |
+$(sed 's/^/        /' "$NOTCH_HOME/ca/ca.crt")
+    claimMappings:
+      username: { claim: email, prefix: "oidc:" }
+      groups: { claim: groups, prefix: "oidc:" }
+EOF
+mv "$NOTCH_HOME/auth/config.yaml.tmp" "$NOTCH_HOME/auth/config.yaml"
 
 # Step 4: cluster
 if ! kind get clusters | grep -qx "$CLUSTER"; then

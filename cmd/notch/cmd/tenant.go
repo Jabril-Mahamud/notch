@@ -17,7 +17,7 @@ var tenantCmd = &cobra.Command{
 
 var tenantCreateCmd = &cobra.Command{
 	Use:   "create <name>",
-	Short: "Create a tenant and write its scoped kubeconfig (rerun to refresh the token)",
+	Short: "Create a tenant and write its kubeconfig (Keycloak login, group RBAC)",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runTenantCreate,
 }
@@ -43,12 +43,12 @@ func runTenantCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// *.kubeconfig is gitignored: this file holds a live token.
+	// *.kubeconfig stays gitignored: it names this cluster's server and CA.
 	path := filepath.Join(root, name+".kubeconfig")
 	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
 		return err
 	}
-	fmt.Printf("tenant %s ready, token valid 24h:\n  export KUBECONFIG=%s\n", name, path)
+	fmt.Printf("tenant %s ready; members of the %s Keycloak group log in with:\n  export KUBECONFIG=%s\n", name, name, path)
 	return nil
 }
 
