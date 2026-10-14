@@ -1,7 +1,15 @@
-# Local cluster, created by scripts/kind-up.sh.
-# Apps are served at http://<host>.localhost:8080 (host 80 is taken by caddy).
+# Local cluster, created by scripts/kind-up.sh, which swaps @NOTCH_HOME@ for an
+# absolute path (kind wants one). Every change here means recreating the
+# cluster (notch down && notch up), so registry, TLS and OIDC prep landed together.
+# Apps: http://<host>.localhost:8080 (host 80 is caddy's), https://<host>.localhost.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+# Pods pull from notch-registry: kind-up.sh writes certs.d/localhost:5001/hosts.toml
+# into the node. kind's containerd config sets no config_path, so certs.d is ignored without this.
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
 nodes:
   - role: control-plane
     labels:
@@ -11,3 +19,28 @@ nodes:
       - containerPort: 80
         hostPort: 8080
         protocol: TCP
+      # Loopback only: tailscale holds 443 on its own IP, and a wildcard bind would collide.
+      # Port-less https keeps the OIDC issuer URL the same for browser, pods and apiserver.
+      - containerPort: 443
+        hostPort: 443
+        listenAddress: 127.0.0.1
+        protocol: TCP
+    extraMounts:
+      - hostPath: "@NOTCH_HOME@/auth"
+        containerPath: /etc/notch/auth
+        readOnly: true
+    # Structured auth config, not --oidc-* flags: the apiserver reloads the file
+    # live, so OIDC (Keycloak) is wired later without recreating the cluster.
+    # kubeadm v1beta3 here (kind's choice), so extraArgs is a map.
+    kubeadmConfigPatches:
+      - |
+        kind: ClusterConfiguration
+        apiServer:
+          extraArgs:
+            authentication-config: /etc/notch/auth/config.yaml
+          extraVolumes:
+            - name: notch-auth
+              hostPath: /etc/notch/auth
+              mountPath: /etc/notch/auth
+              readOnly: true
+              pathType: Directory
