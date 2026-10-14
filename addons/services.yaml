@@ -1,6 +1,9 @@
-# One Application per services/<name>/, rendered through charts/notch-service.
+# One Application per environment x services/<name>/, rendered through
+# charts/notch-service. Environments are ArgoCD clusters labelled notch.dev/env;
+# each says which branch it deploys (notch.dev/revision: dev -> dev, main ->
+# staging), so promotion is a merge. Dev apps keep plain names; others get -<env>.
 # Wave 7: after the CNPG cluster (5) and provider-sql config (6), so a service's
-# Database has somewhere to land on a fresh cluster.
+# database has somewhere to land on a fresh cluster.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -12,29 +15,39 @@ spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
-    - git:
-        repoURL: https://github.com/Jabril-Mahamud/notch.git
-        # notch add pushes to dev; main only moves on phase releases
-        revision: dev
-        directories:
-          - path: services/*
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchExpressions:
+                  - { key: notch.dev/env, operator: Exists }
+          # Each env lists the services on its own branch: a service added on
+          # dev reaches staging only once it's merged to main.
+          - git:
+              repoURL: https://github.com/Jabril-Mahamud/notch.git
+              revision: '{{ index .metadata.annotations "notch.dev/revision" }}'
+              directories:
+                - path: services/*
   template:
     metadata:
-      name: "{{.path.basename}}"
+      name: '{{ if eq (index .metadata.labels "notch.dev/env") "dev" }}{{ .path.basename }}{{ else }}{{ .path.basename }}-{{ index .metadata.labels "notch.dev/env" }}{{ end }}'
     spec:
       project: default
       source:
         repoURL: https://github.com/Jabril-Mahamud/notch.git
-        targetRevision: dev
+        targetRevision: '{{ index .metadata.annotations "notch.dev/revision" }}'
         path: charts/notch-service
         helm:
-          # Relative to the chart path; ArgoCD allows it while it stays in the repo
+          # Relative to the chart path; ArgoCD allows it while it stays in the repo.
+          # local/ carries the image refs (what dev ran); the env dir overrides
+          # hosts. On dev that's local/ again, which is harmless.
           valueFiles:
-            - ../../services/{{.path.basename}}/service.yaml
-            - ../../services/{{.path.basename}}/local/values.yaml
+            - ../../services/{{ .path.basename }}/service.yaml
+            - ../../services/{{ .path.basename }}/local/values.yaml
+            - ../../services/{{ .path.basename }}/{{ index .metadata.annotations "notch.dev/values" }}/values.yaml
       destination:
-        server: https://kubernetes.default.svc
-        namespace: "{{.path.basename}}"
+        server: "{{ .server }}"
+        namespace: "{{ .path.basename }}"
       syncPolicy:
         automated: { prune: true, selfHeal: true }
         syncOptions:

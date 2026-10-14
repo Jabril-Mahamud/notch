@@ -1,0 +1,7 @@
+# Staging overlay: only the host changes. Image refs come from local/values.yaml
+# on main, i.e. exactly what dev ran when it was merged.
+service:
+  endpoints:
+    internal:
+      hosts:
+        - hello.staging.notch.localhost:8443

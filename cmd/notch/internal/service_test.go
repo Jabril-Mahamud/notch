@@ -170,3 +170,15 @@ func TestWriteServiceComponents(t *testing.T) {
 		}
 	}
 }
+
+// Staging deploys what main has, so a new service needs its overlay from day one.
+func TestWriteServiceStagingOverlay(t *testing.T) {
+	dir, err := WriteService(t.TempDir(), Service{Name: "hello", Port: 8000, Tag: "abc1234"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "staging", "values.yaml"))
+	if !strings.Contains(string(got), "- hello.staging.notch.localhost:8443") || strings.Contains(string(got), "ref:") {
+		t.Errorf("staging overlay should set only the staging host:\n%s", got)
+	}
+}

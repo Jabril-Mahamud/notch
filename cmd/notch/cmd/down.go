@@ -9,11 +9,11 @@ import (
 )
 
 var downCmd = &cobra.Command{
-	Use:   "down",
-	Short: "Delete the Kind cluster",
-	Args:  cobra.NoArgs,
+	Use:   "down [dev|staging]",
+	Short: "Delete an environment's Kind cluster (default dev)",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := internal.Down(); err != nil {
+		if err := internal.Down(envArg(args)); err != nil {
 			return err
 		}
 		fmt.Println("cluster deleted")

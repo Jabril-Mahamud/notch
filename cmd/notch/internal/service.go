@@ -19,7 +19,6 @@ type Service struct {
 	Components []Component // monorepos: one container each, split by path
 }
 
-
 var (
 	// Name becomes the namespace, Deployment and Ingress name: DNS label rules.
 	dnsLabel  = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -156,13 +155,27 @@ var valuesTmpl = template.Must(template.New("values").Funcs(template.FuncMap{"re
 {{- end}}
 `))
 
-// WriteService creates services/<name>/{service.yaml,local/values.yaml}.
+// Staging only overrides the host: image refs come from local/values.yaml on
+// main, so promotion ships exactly what dev ran.
+var stagingTmpl = template.Must(template.New("staging").Parse(`service:
+  endpoints:
+    internal:
+      hosts:
+        - {{.Name}}.staging.notch.localhost:8443
+`))
+
+// WriteService creates services/<name>/{service.yaml,local/,staging/values.yaml}.
 func WriteService(root string, s Service) (string, error) {
 	dir := filepath.Join(root, "services", s.Name)
 	if _, err := os.Stat(dir); err == nil {
 		return "", fmt.Errorf("%s already exists", dir)
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "local"), 0o755); err != nil {
+	for _, env := range []string{"local", "staging"} {
+		if err := os.MkdirAll(filepath.Join(dir, env), 0o755); err != nil {
+			return "", err
+		}
+	}
+	if err := render(filepath.Join(dir, "staging", "values.yaml"), stagingTmpl, s); err != nil {
 		return "", err
 	}
 	if err := render(filepath.Join(dir, "service.yaml"), serviceTmpl, s); err != nil {

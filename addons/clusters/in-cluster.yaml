@@ -1,0 +1,22 @@
+# The dev cluster itself, as an ArgoCD cluster with labels, so ApplicationSets
+# can fan out over environments with one cluster generator. No credentials:
+# in-cluster uses ArgoCD's own ServiceAccount. Staging's secret is made by
+# kind-up.sh (it carries a client cert, so it stays out of git).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-in-cluster
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    # Branch this environment deploys, and its values dir under services/<svc>/.
+    notch.dev/revision: dev
+    notch.dev/values: local
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+    notch.dev/env: dev
+type: Opaque
+stringData:
+  name: in-cluster
+  server: https://kubernetes.default.svc
+  config: '{"tlsClientConfig":{"insecure":false}}'

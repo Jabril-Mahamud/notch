@@ -21,17 +21,17 @@ check "ApplicationSet named services in argocd" \
 check "syncs after platform infra (wave 7)" \
   '.metadata.annotations["argocd.argoproj.io/sync-wave"] == "7"'
 check "git generator over services/*" \
-  '.spec.generators[0].git.directories[0].path == "services/*"'
-check "generator tracks dev (notch add pushes there)" \
-  '.spec.generators[0].git.revision == "dev"'
+  '.spec.generators[0].matrix.generators[1].git.directories[0].path == "services/*"'
+check "dev tracks dev (notch add pushes there)" \
+  '.metadata.annotations["notch.dev/revision"] == "dev"' "$(cat addons/clusters/in-cluster.yaml)"
 check "app named after the service" \
-  '.spec.template.metadata.name == "{{.path.basename}}"'
-check "renders charts/notch-service from dev" \
-  '.spec.template.spec.source.path == "charts/notch-service" and .spec.template.spec.source.targetRevision == "dev"'
-check "values: service.yaml then local/values.yaml" \
-  '.spec.template.spec.source.helm.valueFiles == ["../../services/{{.path.basename}}/service.yaml", "../../services/{{.path.basename}}/local/values.yaml"]'
+  '.spec.template.metadata.name | test("\\{\\{ *\\.path\\.basename *\\}\\}")'
+check "renders charts/notch-service from the env's branch" \
+  '.spec.template.spec.source.path == "charts/notch-service" and (.spec.template.spec.source.targetRevision | test("notch.dev/revision"))'
+check "values: service.yaml, then local/values.yaml, then the env overlay" \
+  '.spec.template.spec.source.helm.valueFiles[0:2] == ["../../services/{{ .path.basename }}/service.yaml", "../../services/{{ .path.basename }}/local/values.yaml"]'
 check "deploys into a namespace named after the service" \
-  '.spec.template.spec.destination.namespace == "{{.path.basename}}"'
+  '.spec.template.spec.destination.namespace == "{{ .path.basename }}"'
 check "auto-sync with prune and self-heal" \
   '.spec.template.spec.syncPolicy.automated.prune and .spec.template.spec.syncPolicy.automated.selfHeal'
 check "retries failed syncs (Database CRD may land late)" \

@@ -7,16 +7,24 @@ import (
 )
 
 var upCmd = &cobra.Command{
-	Use:   "up",
-	Short: "Create the Kind cluster and bootstrap the platform",
-	Args:  cobra.NoArgs,
+	Use:   "up [dev|staging]",
+	Short: "Create an environment's Kind cluster and bootstrap it (default dev)",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := internal.RepoRoot()
 		if err != nil {
 			return err
 		}
-		return internal.Up(root)
+		return internal.Up(root, envArg(args))
 	},
 }
 
 func init() { rootCmd.AddCommand(upCmd) }
+
+// envArg is the optional environment argument of up/down.
+func envArg(args []string) string {
+	if len(args) == 0 {
+		return "dev"
+	}
+	return args[0]
+}
