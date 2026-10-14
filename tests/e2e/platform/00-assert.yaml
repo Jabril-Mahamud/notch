@@ -125,3 +125,14 @@ commands:
   - command: kubectl wait --for=condition=Offered xrd/xnotchpostgres.notch.dev --timeout=10s
   - command: kubectl wait --for=condition=Healthy function/function-patch-and-transform --timeout=10s
   - command: kubectl get composition notch-postgres-cnpg
+  # Pods reach *.notch.localhost through the ingress (CoreDNS rewrite), over TLS
+  # from the notch CA. curl pins *.localhost to loopback itself (RFC 6761), so
+  # resolve through DNS first, as app runtimes do, and hand curl the address.
+  - script: |
+      set -e
+      kubectl -n hello delete pod dns-probe --ignore-not-found >/dev/null
+      kubectl -n hello get secret hello-tls -o jsonpath='{.data.ca\.crt}' | base64 -d |
+        kubectl -n hello run dns-probe --image=curlimages/curl:8.17.0 --restart=Never --rm -i --quiet --command -- sh -c '
+          cat > /tmp/ca.crt
+          IP=$(nslookup hello.notch.localhost | sed -n "s/^Address: //p" | tail -1)
+          curl -sf --cacert /tmp/ca.crt --resolve "hello.notch.localhost:443:$IP" -o /dev/null https://hello.notch.localhost/'

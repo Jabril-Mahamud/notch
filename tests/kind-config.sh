@@ -45,4 +45,13 @@ grep_check "kind-up maps localhost:5001 to notch-registry in the node" \
 grep_check "CLI pushes to the same registry" \
   'Registry = "localhost:5001"' cmd/notch/internal/image.go
 
+# *.notch.localhost resolves to ::1 inside the cluster: pods and the apiserver
+# would never reach the ingress (OIDC issuer, apps calling their own public URL).
+grep_check "kind-up rewrites *.notch.localhost to the ingress controller in CoreDNS" \
+  'rewrite name regex .*notch.*localhost.* ingress-nginx-controller\.ingress-nginx\.svc\.cluster\.local' scripts/kind-up.sh
+grep_check "kind-up points the node (apiserver) at the ingress for keycloak.notch.localhost" \
+  'keycloak\.notch\.localhost.*/etc/hosts|/etc/hosts.*keycloak\.notch\.localhost' scripts/kind-up.sh
+grep_check "notch resume reruns kind-up (docker start resets /etc/hosts)" \
+  'func Resume\(root string\)' cmd/notch/internal/kind.go
+
 exit $FAILED

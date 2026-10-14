@@ -29,14 +29,19 @@ func Pause() error {
 	return Run("docker", "stop", Node)
 }
 
-func Resume() error {
+// Resume starts the node, then reruns kind-up.sh: docker start resets the
+// node's /etc/hosts, which the apiserver needs to reach the OIDC issuer.
+func Resume(root string) error {
 	if err := Run("docker", "start", Node); err != nil {
 		return err
 	}
 	if err := waitAPI(time.Minute); err != nil {
 		return err
 	}
-	return Kubectl("wait", "--for=condition=Ready", "node", "--all", "--timeout=120s")
+	if err := Kubectl("wait", "--for=condition=Ready", "node", "--all", "--timeout=120s"); err != nil {
+		return err
+	}
+	return Up(root)
 }
 
 // waitAPI polls the API server: kubectl wait fails outright (connection

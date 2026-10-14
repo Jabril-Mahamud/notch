@@ -13,7 +13,11 @@ var resumeCmd = &cobra.Command{
 	Short: "Start a paused cluster and wait for it to be Ready",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := internal.Resume(); err != nil {
+		root, err := internal.RepoRoot()
+		if err != nil {
+			return err
+		}
+		if err := internal.Resume(root); err != nil {
 			return err
 		}
 		fmt.Println("cluster resumed")

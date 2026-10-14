@@ -80,6 +80,28 @@ fi
 # Step 8: root app pointing ArgoCD at this repo
 kubectl apply -f clusters/kind.yaml
 
+# Step 9: *.notch.localhost resolves to ::1 off the host, so in-cluster callers
+# never reach the ingress. The OIDC issuer URL must be the same string for the
+# browser, pods and the apiserver, so route the name to the ingress controller.
+# ponytail: Kind only. Cloud environments get real DNS and none of this.
+echo "waiting for ingress-nginx (OIDC issuer routing)..."
+for _ in $(seq 60); do
+  INGRESS_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)
+  [ -n "$INGRESS_IP" ] && break
+  sleep 5
+done
+[ -n "$INGRESS_IP" ] || { echo "ingress-nginx never came up" >&2; exit 1; }
+# Pods: CoreDNS (kubeadm-owned, not ArgoCD's). Its reload plugin picks this up in ~30s.
+COREFILE=$(kubectl -n kube-system get cm coredns -o jsonpath='{.data.Corefile}')
+if ! grep -q notch.localhost <<<"$COREFILE"; then
+  COREFILE=$(sed 's|^    ready$|    ready\n    rewrite name regex (.+)\\.notch\\.localhost\\.$ ingress-nginx-controller.ingress-nginx.svc.cluster.local. answer auto|' <<<"$COREFILE")
+  kubectl -n kube-system create cm coredns --from-literal=Corefile="$COREFILE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+fi
+# Apiserver: host network, so it uses the node's resolver, not CoreDNS. Docker
+# rewrites /etc/hosts on every container start, hence notch resume reruns this.
+docker exec "$CLUSTER-control-plane" sh -c \
+  "grep -v ' keycloak.notch.localhost\$' /etc/hosts > /tmp/hosts; echo '$INGRESS_IP keycloak.notch.localhost' >> /tmp/hosts; cat /tmp/hosts > /etc/hosts"
+
 cat <<EOF
 
 Notch is up. Watch:   kubectl -n argocd get applications -w
