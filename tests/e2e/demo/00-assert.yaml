@@ -1,0 +1,28 @@
+# Phase 3: an app scaffolded by `notch new demo`, end to end: Next.js at /,
+# FastAPI at /api, and a write that lands in its Postgres.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: demo
+status:
+  readyReplicas: 1
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      curl -sf http://demo.notch.localhost:8080/ | grep -q '<h1>demo'
+      curl -sf -X POST http://demo.notch.localhost:8080/api/visits | grep -q '"visits":'
