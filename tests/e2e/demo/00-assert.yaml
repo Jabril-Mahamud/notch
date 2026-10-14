@@ -1,5 +1,6 @@
-# Phase 3: an app scaffolded by `notch new demo`, end to end: Next.js at /,
-# FastAPI at /api, and a write that lands in its Postgres.
+# Phase 3: github.com/Jabril-Mahamud/notch-demo (scaffolded by `notch new`),
+# end to end: Next.js at /, FastAPI at /api, a todo written to its Postgres,
+# and live weather fetched from Open-Meteo (needs internet egress).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -24,5 +25,9 @@ kind: TestAssert
 commands:
   - script: |
       set -e
-      curl -sf http://demo.notch.localhost:8080/ | grep -q '<h1>demo'
-      curl -sf -X POST http://demo.notch.localhost:8080/api/visits | grep -q '"visits":'
+      H=http://demo.notch.localhost:8080
+      curl -sf $H/ | grep -q 'Hello, world'
+      ID=$(curl -sf -X POST $H/api/todos -H 'Content-Type: application/json' -d '{"title":"kuttl"}' | sed -E 's/.*"id":([0-9]+).*/\1/')
+      curl -sf $H/api/todos | grep -q '"title":"kuttl"'
+      curl -sf -X DELETE $H/api/todos/$ID
+      curl -sf $H/api/weather | grep -q '"temperature_c"'
