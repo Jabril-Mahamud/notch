@@ -1,0 +1,42 @@
+# ArgoCD and Grafana SSO through Keycloak: roles come from the groups claim.
+# notch-admins = ArgoCD admin / Grafana Admin; everyone else read-only / Viewer.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  # ArgoCD accepts its IdP's id_tokens as bearer tokens.
+  - script: |
+      set -e
+      CA="${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt"
+      ISSUER=https://keycloak.notch.localhost/realms/notch
+      PW=$(kubectl -n keycloak get secret keycloak-secrets -o jsonpath='{.data.NOTCH_USER_PASSWORD}' | base64 -d)
+      SECRET=$(kubectl -n argocd get secret argocd-oidc -o jsonpath='{.data.clientSecret}' | base64 -d)
+      token() {
+        curl -sf --cacert "$CA" "$ISSUER/protocol/openid-connect/token" -d grant_type=password -d client_id=argocd \
+          -d client_secret="$SECRET" -d scope=openid -d username="$1" -d password="$PW" |
+          python3 -c 'import sys,json; print(json.load(sys.stdin)["id_token"])'
+      }
+      cani() { # user -> can they sync the hello app?
+        curl -sf --cacert "$CA" -H "Authorization: Bearer $(token "$1")" \
+          https://argocd.notch.localhost/api/v1/account/can-i/applications/sync/default%2Fhello
+      }
+      cani jabril | grep -q '"value":"yes"'
+      cani alice | grep -q '"value":"no"'
+      curl -sf --cacert "$CA" -H "Authorization: Bearer $(token alice)" https://argocd.notch.localhost/api/v1/applications | grep -q '"name":"hello"'
+  # Grafana: a real browser-style login. Grafana's server-side token exchange
+  # runs in its pod, so this also proves pods reach and trust Keycloak.
+  - script: |
+      set -e
+      CA="${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt"
+      PW=$(kubectl -n keycloak get secret keycloak-secrets -o jsonpath='{.data.NOTCH_USER_PASSWORD}' | base64 -d)
+      role() { # user -> Grafana org role after an SSO login
+        JAR=$(mktemp)
+        FORM=$(curl -sfL --cacert "$CA" -c "$JAR" -b "$JAR" https://grafana.notch.localhost/login/generic_oauth |
+          sed -n 's/.*id="kc-form-login"[^>]*action="\([^"]*\)".*/\1/p' | sed 's/&amp;/\&/g')
+        [ -n "$FORM" ]
+        curl -sfL --cacert "$CA" -c "$JAR" -b "$JAR" -o /dev/null -d username="$1" -d password="$PW" "$FORM"
+        curl -sf --cacert "$CA" -b "$JAR" https://grafana.notch.localhost/api/user/orgs |
+          python3 -c 'import sys,json; print(json.load(sys.stdin)[0]["role"])'
+        rm -f "$JAR"
+      }
+      [ "$(role jabril)" = Admin ]
+      [ "$(role alice)" = Viewer ]
