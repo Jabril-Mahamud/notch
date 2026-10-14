@@ -4,6 +4,9 @@
 {{- if and $hosts $svc.ports }}
 {{- $multi := gt (len $svc.ports) 1 }}
 {{- $paths := list }}
+{{- /* Hosts carry the Kind port mapping (:8080) for the browser, but Ingress rejects a host with a port */}}
+{{- $bare := list }}
+{{- range $hosts }}{{ $bare = append $bare (regexReplaceAll ":[0-9]+$" . "") }}{{ end }}
 {{- range $svc.ports }}
 {{- if and $multi (not .path) }}{{ fail (printf "service port %s needs a path: multiple ports are split by path" .name) }}{{ end }}
 {{- $paths = append $paths (dict "path" (.path | default "/") "pathType" "Prefix" "backend" (dict "service" (dict "name" $name "port" (dict "name" .name)))) }}
@@ -13,15 +16,22 @@ kind: Ingress
 metadata:
   name: {{ $name }}
   namespace: {{ include "notch.namespace" . }}
+  annotations:
+    # cert-manager's ingress-shim makes a Certificate for spec.tls, signed by the
+    # local CA (kind-up.sh). A Let's Encrypt issuer swaps in for the cloud.
+    cert-manager.io/cluster-issuer: notch-ca
   labels:
     {{- include "notch.labels" . | nindent 4 }}
 spec:
   ingressClassName: nginx
-  # Hosts carry the Kind port mapping (:8080) for the browser, but Ingress
-  # rejects a host with a port, so strip it.
+  # TLS means ingress-nginx redirects http to https.
+  tls:
+    - hosts:
+        {{- toYaml $bare | nindent 8 }}
+      secretName: {{ $name }}-tls
   rules:
-    {{- range $hosts }}
-    - host: {{ regexReplaceAll ":[0-9]+$" . "" }}
+    {{- range $bare }}
+    - host: {{ . }}
       http:
         paths:
           {{- toYaml $paths | nindent 10 }}

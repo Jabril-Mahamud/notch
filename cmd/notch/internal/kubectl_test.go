@@ -11,11 +11,11 @@ func TestFormatList(t *testing.T) {
 	out := FormatList(apps, ingresses)
 
 	for _, want := range []string{
-		"http://hello.notch.localhost:8080",
+		"https://hello.notch.localhost",
 		"OutOfSync",
 		"misc/grafana",
-		"http://grafana.localhost:8080",
-		"http://prom.localhost:8080",
+		"https://grafana.localhost",
+		"https://prom.localhost",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)

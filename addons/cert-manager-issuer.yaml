@@ -1,0 +1,14 @@
+# Signs every service Ingress cert with the local CA. kind-up.sh creates the CA
+# once in ~/.config/notch/ca and loads it as the notch-ca secret, so it survives
+# notch down and is trusted once (curl --cacert, or the system trust store).
+# ponytail: one local CA. Phase 4 adds a Let's Encrypt ClusterIssuer per cloud env.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: notch-ca
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  ca:
+    # ClusterIssuers read secrets from cert-manager's own namespace.
+    secretName: notch-ca

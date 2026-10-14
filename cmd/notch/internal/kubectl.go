@@ -42,9 +42,6 @@ func CreateSecret(name string, keys, values []string) error {
 	return nil
 }
 
-// kind.yaml maps host 8080 to the ingress controller; Ingress hosts carry no port.
-const ingressPort = "8080"
-
 const (
 	appsJSONPath    = `{range .items[*]}{.metadata.name}{"\t"}{.status.sync.status}{"\t"}{.status.health.status}{"\n"}{end}`
 	ingressJSONPath = `{range .items[*]}{.metadata.namespace}/{.metadata.name} {.spec.rules[0].host}{"\n"}{end}`
@@ -110,7 +107,8 @@ func url(host string) string {
 	if host == "" {
 		return ""
 	}
-	return "http://" + host + ":" + ingressPort
+	// Every chart Ingress has TLS (cert-manager); kind.yaml maps 127.0.0.1:443.
+	return "https://" + host
 }
 
 func dash(s string) string {

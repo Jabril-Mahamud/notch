@@ -57,6 +57,10 @@ check "PG env from the db secret" \
   '.[] | select(.kind == "Deployment") | [.spec.template.spec.containers[0].env[] | select(.name == "PGHOST") | .valueFrom.secretKeyRef] == [{"name":"hello-db","key":"endpoint"}]'
 check "ingress host has the port stripped" \
   '.[] | select(.kind == "Ingress") | .spec.rules[0].host == "hello.notch.localhost"'
+check "ingress serves TLS for the stripped host from <service>-tls" \
+  '.[] | select(.kind == "Ingress") | .spec.tls == [{"hosts":["hello.notch.localhost"],"secretName":"hello-tls"}]'
+check "cert-manager issues the ingress cert from the notch CA" \
+  '.[] | select(.kind == "Ingress") | .metadata.annotations["cert-manager.io/cluster-issuer"] == "notch-ca"'
 check "single port routes /" \
   '.[] | select(.kind == "Ingress") | .spec.rules[0].http.paths == [{"path":"/","pathType":"Prefix","backend":{"service":{"name":"hello","port":{"name":"http"}}}}]'
 check "ExternalSecret pulls each listed key from <service>-secrets" \

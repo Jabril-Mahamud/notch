@@ -30,4 +30,9 @@ commands:
       for i in $IMAGES; do case $i in localhost:5001/*) ;; *) echo "not from the registry: $i"; exit 1 ;; esac; done
   - command: kubectl wait --for=condition=Ready database.postgresql.sql.crossplane.io/hello --timeout=10s
   - command: kubectl -n hello wait --for=condition=Ready externalsecret/hello-secrets --timeout=10s
-  - command: curl -sf http://hello.notch.localhost:8080/
+  - command: kubectl -n hello wait --for=condition=Ready certificate/hello-tls --timeout=10s
+  # Served over TLS signed by the notch CA, and plain http redirects there.
+  - script: |
+      set -e
+      curl -sf --cacert "${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt" https://hello.notch.localhost/ >/dev/null
+      [ "$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://hello.notch.localhost:8080/)" = "308 https://hello.notch.localhost/" ]
