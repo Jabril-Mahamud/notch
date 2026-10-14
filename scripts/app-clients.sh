@@ -41,11 +41,16 @@ client() { # service-dir
     (umask 077; echo "$var=$(openssl rand -hex 24)" >> "$SECRETS")
   secret=$(sed -n "s/^$var=//p" "$SECRETS")
 
-  # Server-side, owning only this key: notch add's client-side apply of the
-  # app's own secrets leaves it alone, and this leaves theirs.
-  printf 'OIDC_CLIENT_SECRET=%s\n' "$secret" |
-    "${KC[@]}" -n notch-secrets create secret generic "$id-secrets" --from-env-file=/dev/stdin --dry-run=client -o yaml |
-    "${KC[@]}" apply --server-side --field-manager=notch-oidc -f - >/dev/null
+  # Merge patch, not apply: notch add client-side applies the app's own keys
+  # here, and a server-side apply takes those fields over and drops them.
+  # Values on stdin, out of ps.
+  if "${KC[@]}" -n notch-secrets get secret "$id-secrets" >/dev/null 2>&1; then
+    jq -nc --arg s "$secret" '{stringData: {OIDC_CLIENT_SECRET: $s}}' |
+      "${KC[@]}" -n notch-secrets patch secret "$id-secrets" --type merge --patch-file /dev/stdin >/dev/null
+  else
+    printf 'OIDC_CLIENT_SECRET=%s\n' "$secret" |
+      "${KC[@]}" -n notch-secrets create secret generic "$id-secrets" --from-env-file=/dev/stdin >/dev/null
+  fi
 
   # Ingress hosts: local drops Kind's :8080 (the browser comes in on 443), staging keeps :8443
   hosts=$(yq -r '.service.endpoints.internal.hosts[]?' "$dir"/*/values.yaml | sed 's/:8080$//')
@@ -53,7 +58,7 @@ client() { # service-dir
   client_json "$id" "$secret" "$hosts" | "${KC[@]}" -n keycloak exec -i deploy/keycloak -- sh -c '
     kc() { /opt/keycloak/bin/kcadm.sh "$@" --config /tmp/kcadm.config; }
     kc config credentials --server http://localhost:8080 --realm master \
-      --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" >/dev/null
+      --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" >/dev/null 2>&1
     uuid=$(kc get clients -r notch -q clientId="$1" --fields id --format csv --noquotes)
     if [ -n "$uuid" ]; then kc update "clients/$uuid" -r notch -f -; else kc create clients -r notch -f - >/dev/null; fi
   ' sh "$id"
