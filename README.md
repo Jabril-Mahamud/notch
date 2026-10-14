@@ -10,13 +10,15 @@ Needs Docker, kind, kubectl, helm, Go and [mise](https://mise.jdx.dev/) (`mise i
 
 ```bash
 go build -o bin/notch ./cmd/notch/
-notch up                    # bring up the cluster + platform
+notch up                    # bring up the dev cluster + platform
+notch up staging            # second cluster, deployed by dev's ArgoCD from main
 notch new <name>            # scaffold a FastAPI + Next.js + Postgres app and deploy it
 notch add <repo>            # deploy any repo or GitHub starter, Dockerfile optional
 notch list                  # see what's running
 notch logs <service>        # tail a service
 notch tenant create <team>  # isolated namespace + kubeconfig (Keycloak login)
-notch pause / resume / down # stop, restart or delete the cluster
+notch pause / resume        # stop or restart the dev cluster
+notch down [staging]        # delete an environment's cluster
 ```
 
 Apps are served at `https://<name>.notch.localhost`, with certs from cert-manager signed by a local CA that `notch up` creates once in `~/.config/notch/ca` (plain `http://...:8080` redirects there). Trust it once:
@@ -52,6 +54,15 @@ sudo trust anchor --store ~/.config/notch/ca/ca.crt   # system + browsers (Arch/
 Secrets are prompted and synced through ExternalSecrets. Services with `postgres: true` get `DATABASE_URL` plus the `PG*` vars; a container's own `env` in `service.yaml` overrides them by name and can use `$(PGUSER)` etc., e.g. for a `postgresql+asyncpg://` scheme.
 
 Rerunning `notch add` on an existing service rebuilds it; if the source moved, the new tag is committed to `dev` and ArgoCD rolls the pods. The registry outlives the cluster, so after `notch down` / `up` a rerun is only needed to re-enter `--secret` values.
+
+## Environments
+
+| Env | Cluster | Branch | URL |
+|:--|:--|:--|:--|
+| dev | `notch` (Kind) | `dev` | `https://<svc>.notch.localhost` |
+| staging | `notch-staging` (Kind) | `main` | `https://<svc>.staging.notch.localhost:8443` |
+
+One ArgoCD (on dev) deploys both: each environment is an ArgoCD cluster labelled `notch.dev/env`, and the services ApplicationSet fans out over them. Promotion is a merge, `dev` into `main`, and staging runs the same image tags dev ran (one registry, no rebuild). Staging is lean: no observability stack, no Keycloak (about 2.2 GiB vs 6.1 GiB for dev). `services/<svc>/staging/values.yaml` overrides the host only. Preview `dev` on staging with `STAGING_REVISION=dev notch up staging`.
 
 ## Tenants
 
@@ -93,7 +104,7 @@ Tenant services live in `tenants/<tenant>/services/<svc>/` (same `service.yaml` 
 ```bash
 for t in tests/*.sh; do [ "$t" = tests/e2e.sh ] || bash "$t"; done  # static: chart + addon assertions
 (cd cmd/notch && go test ./...)                                      # CLI
-tests/e2e.sh                                                         # kuttl, against a running cluster
+tests/e2e.sh                                                         # kuttl, against dev + staging
 ```
 
 ## License
