@@ -19,7 +19,12 @@ notch tenant create <team>  # isolated namespace + scoped kubeconfig
 notch pause / resume / down # stop, restart or delete the cluster
 ```
 
-Apps are served at `http://<name>.notch.localhost:8080`.
+Apps are served at `https://<name>.notch.localhost`, with certs from cert-manager signed by a local CA that `notch up` creates once in `~/.config/notch/ca` (plain `http://...:8080` redirects there). Trust it once:
+
+```bash
+curl --cacert ~/.config/notch/ca/ca.crt https://hello.notch.localhost/
+sudo trust anchor --store ~/.config/notch/ca/ca.crt   # system + browsers (Arch/Fedora; Debian: update-ca-certificates)
+```
 
 ## How it works
 
@@ -64,6 +69,7 @@ Tenant services live in `tenants/<tenant>/services/<svc>/` (same `service.yaml` 
 - **ArgoCD**: GitOps sync
 - **Crossplane + provider-sql**: per-service Postgres
 - **CloudNativePG**: in-cluster Postgres
+- **cert-manager**: TLS for every Ingress from the local CA
 - **ExternalSecrets** + **Reloader**: secrets, with restarts on change
 - **ingress-nginx**: routing
 - **kube-prometheus-stack**: metrics + dashboards
