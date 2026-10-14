@@ -67,7 +67,7 @@ Tenant services live in `tenants/<tenant>/services/<svc>/` (same `service.yaml` 
 ## Stack
 
 - **ArgoCD**: GitOps sync
-- **Crossplane + provider-sql**: per-service Postgres
+- **Crossplane + provider-sql**: per-service Postgres through a `NotchPostgres` claim (XRD + Composition, CNPG behind it)
 - **CloudNativePG**: in-cluster Postgres
 - **cert-manager**: TLS for every Ingress from the local CA
 - **ExternalSecrets** + **Reloader**: secrets, with restarts on change

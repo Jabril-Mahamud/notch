@@ -116,3 +116,12 @@ metadata:
   namespace: platform-db
 status:
   phase: Cluster in healthy state
+---
+# NotchPostgres API: XRD established + claim offered, function running.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - command: kubectl wait --for=condition=Established xrd/xnotchpostgres.notch.dev --timeout=10s
+  - command: kubectl wait --for=condition=Offered xrd/xnotchpostgres.notch.dev --timeout=10s
+  - command: kubectl wait --for=condition=Healthy function/function-patch-and-transform --timeout=10s
+  - command: kubectl get composition notch-postgres-cnpg

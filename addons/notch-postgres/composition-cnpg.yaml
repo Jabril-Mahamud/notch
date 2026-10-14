@@ -1,0 +1,75 @@
+# NotchPostgres on the shared CNPG cluster: one login role + one database it owns.
+# ponytail: one composition. A cloud environment adds e.g. notch-postgres-rds and
+# points defaultCompositionRef (or the claim's compositionSelector) at it.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: notch-postgres-cnpg
+  labels:
+    provider: cnpg
+  annotations:
+    # After the XRD (wave 3): the Composition webhook validates against it.
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  compositeTypeRef:
+    apiVersion: notch.dev/v1alpha1
+    kind: XNotchPostgres
+  # XR connection secrets land here, then Crossplane copies them to the claim's namespace.
+  writeConnectionSecretsToNamespace: crossplane-system
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: role
+            base:
+              apiVersion: postgresql.sql.crossplane.io/v1alpha1
+              kind: Role
+              spec:
+                # Explicit, or the managed resource waits forever for "default"
+                providerConfigRef:
+                  name: notch-shared-pg
+                forProvider:
+                  privileges:
+                    login: true
+                # provider-sql generates the password and writes endpoint/port/username/password here
+                writeConnectionSecretToRef:
+                  namespace: crossplane-system
+            patches:
+              # Composed names are generated (<xr>-<hash>); the external name is
+              # what Postgres sees, and PGDATABASE/PGUSER in the chart rely on it.
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.databaseName
+                toFieldPath: metadata.annotations[crossplane.io/external-name]
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.writeConnectionSecretToRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-role"
+            connectionDetails:
+              - { name: endpoint, type: FromConnectionSecretKey, fromConnectionSecretKey: endpoint }
+              - { name: port, type: FromConnectionSecretKey, fromConnectionSecretKey: port }
+              - { name: username, type: FromConnectionSecretKey, fromConnectionSecretKey: username }
+              - { name: password, type: FromConnectionSecretKey, fromConnectionSecretKey: password }
+          - name: database
+            base:
+              apiVersion: postgresql.sql.crossplane.io/v1alpha1
+              kind: Database
+              spec:
+                providerConfigRef:
+                  name: notch-shared-pg
+                forProvider: {}
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.databaseName
+                toFieldPath: metadata.annotations[crossplane.io/external-name]
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.databaseName
+                toFieldPath: spec.forProvider.owner

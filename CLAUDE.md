@@ -19,6 +19,7 @@ addons/                       ← one ArgoCD Application per addon, sync-waved
   services.yaml               ← ApplicationSet: services/* → charts/notch-service
   tenants.yaml                ← ApplicationSet: tenants/* → charts/notch-tenant
   tenant-services.yaml        ← ApplicationSet: tenants/*/services/* into the tenant ns
+  notch-postgres/             ← NotchPostgres XRD + CNPG Composition (services claim a DB)
 services/<name>/              ← service.yaml + local/values.yaml (written by notch add)
 tenants/<team>/               ← platform.yaml (+ services/<svc>/)
 charts/notch-service/         ← renders a service (Deployment, Ingress, DB, ExternalSecret)
@@ -64,7 +65,7 @@ mise.toml                     ← railpack + kuttl versions
 ## v2 gotchas
 1. kuttl `script:` runs via `sh -c`: without `set -e` only the last line counts, and `! cmd` never trips `set -e`. Expected failures: `if cmd; then exit 1; fi`
 2. Quota on `requests.*`/`limits.*` rejects pods without them: the tenant LimitRange fills defaults. Over-quota tests must set a limit too, or the LimitRange rejects first
-3. Cluster-scoped names (Database, Role, ArgoCD apps, notch-secrets source secrets) collide across tenants: tenant services get a `<tenant>-` prefix (`notch.id`)
+3. Cluster-scoped names (Postgres databases/roles, provider-sql MRs, ArgoCD apps, notch-secrets source secrets) collide across tenants: tenant services get a `<tenant>-` prefix (`notch.id`)
 4. k8s only expands `$(VAR)` from env entries earlier in the list: platform env first, container env last, overriding by name (duplicates break SSA)
 5. Images go to `notch-registry` (`localhost:5001`) with commit-sha tags; a rebuild commits the new tag, never reuses one. Pods resolve `localhost:5001` via the node's `certs.d` hosts.toml (kind-up.sh), which containerd ignores without the `config_path` patch in kind.yaml
 6. `pack` (buildpacks) can't export into Docker's containerd image store: Railpack + buildx instead

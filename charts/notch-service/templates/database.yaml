@@ -1,38 +1,22 @@
 {{- if .Values.service.postgres }}
 {{- $name := include "notch.name" . }}
-{{- $id := include "notch.id" . }}
-# Role before Database: the Database is owned by it
-apiVersion: postgresql.sql.crossplane.io/v1alpha1
-kind: Role
+# The platform's Postgres API (addons/notch-postgres): the Composition decides
+# what backs it, so this claim stays the same on Kind and in the cloud.
+apiVersion: notch.dev/v1alpha1
+kind: NotchPostgres
 metadata:
-  name: {{ $id }}
+  name: {{ $name }}
+  namespace: {{ include "notch.namespace" . }}
   annotations:
-    argocd.argoproj.io/sync-wave: "-2"
-  labels:
-    {{- include "notch.labels" . | nindent 4 }}
-spec:
-  # Explicit, or the managed resource waits forever for "default"
-  providerConfigRef:
-    name: {{ .Values.providerConfig }}
-  forProvider:
-    privileges:
-      login: true
-  # provider-sql generates the password and writes endpoint/port/username/password here
-  writeConnectionSecretToRef:
-    name: {{ $name }}-db
-    namespace: {{ include "notch.namespace" . }}
----
-apiVersion: postgresql.sql.crossplane.io/v1alpha1
-kind: Database
-metadata:
-  name: {{ $id }}
-  annotations:
+    # Before the Deployment: its PG* env reads the secret this writes.
     argocd.argoproj.io/sync-wave: "-1"
   labels:
     {{- include "notch.labels" . | nindent 4 }}
 spec:
-  providerConfigRef:
-    name: {{ .Values.providerConfig }}
-  forProvider:
-    owner: {{ $id }}
+  # Database and role names are cluster-wide in the shared Postgres: notch.id
+  # prefixes tenant services.
+  databaseName: {{ include "notch.id" . }}
+  # endpoint/port/username/password, read by the Deployment's PG* env
+  writeConnectionSecretToRef:
+    name: {{ $name }}-db
 {{- end }}

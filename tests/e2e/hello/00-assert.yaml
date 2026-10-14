@@ -28,7 +28,8 @@ commands:
       IMAGES=$(kubectl -n hello get deploy hello -o jsonpath='{.spec.template.spec.containers[*].image}')
       [ -n "$IMAGES" ]
       for i in $IMAGES; do case $i in localhost:5001/*) ;; *) echo "not from the registry: $i"; exit 1 ;; esac; done
-  - command: kubectl wait --for=condition=Ready database.postgresql.sql.crossplane.io/hello --timeout=10s
+  # Ready = the composed Role and Database are Ready and <service>-db is written.
+  - command: kubectl -n hello wait --for=condition=Ready notchpostgres/hello --timeout=10s
   - command: kubectl -n hello wait --for=condition=Ready externalsecret/hello-secrets --timeout=10s
   - command: kubectl -n hello wait --for=condition=Ready certificate/hello-tls --timeout=10s
   # Served over TLS signed by the notch CA, and plain http redirects there.

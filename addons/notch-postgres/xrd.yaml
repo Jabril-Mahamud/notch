@@ -1,0 +1,36 @@
+# The Postgres API services use: a namespaced NotchPostgres claim with a
+# database name, creds written to a Secret next to it. Which Postgres backs it
+# is the Composition's business (CNPG via provider-sql today, RDS in the cloud).
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xnotchpostgres.notch.dev
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  group: notch.dev
+  names:
+    kind: XNotchPostgres
+    plural: xnotchpostgres
+  claimNames:
+    kind: NotchPostgres
+    plural: notchpostgres
+  # The chart's PG* env reads these keys from <service>-db.
+  connectionSecretKeys: [endpoint, port, username, password]
+  defaultCompositionRef:
+    name: notch-postgres-cnpg
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [databaseName]
+              properties:
+                databaseName:
+                  type: string
+                  description: Database and role name. Cluster-wide, so tenants get a prefix (notch.id).
