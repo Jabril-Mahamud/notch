@@ -8,6 +8,7 @@ Point it at a repo — it builds, ships, routes, and provisions a database. Driv
 
 ```bash
 notch up          # bring up the cluster + platform
+notch new <name>  # scaffold a FastAPI + Next.js + Postgres app and deploy it
 notch add <repo>  # deploy any repo or GitHub starter, Dockerfile optional
 notch list        # see what's running
 notch tenant create <team>  # isolated namespace + scoped kubeconfig
