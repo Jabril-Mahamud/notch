@@ -39,7 +39,11 @@ commands:
   - script: |
       set -e
       CA="${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt"
-      S="--context kind-notch-staging"
+      # kuttl hands scripts its own kubeconfig with only the current context,
+      # so staging's comes from kind.
+      KC=$(mktemp); trap 'rm -f "$KC"' EXIT
+      kind get kubeconfig --name notch-staging > "$KC"
+      S="--kubeconfig $KC"
       # Its own Postgres via the same NotchPostgres API, its own TLS from the shared CA.
       kubectl $S -n hello wait --for=condition=Ready notchpostgres/hello --timeout=10s
       curl -sf --cacert "$CA" https://hello.staging.notch.localhost:8443/ >/dev/null
