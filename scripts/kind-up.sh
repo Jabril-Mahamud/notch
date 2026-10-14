@@ -198,6 +198,10 @@ fi
 docker exec "$CLUSTER-control-plane" sh -c \
   "grep -v ' keycloak.notch.localhost\$' /etc/hosts > /tmp/hosts; echo '$INGRESS_IP keycloak.notch.localhost' >> /tmp/hosts; cat /tmp/hosts > /etc/hosts"
 
+# Step 10: Keycloak clients for auth: true services. The realm import on every
+# Keycloak start wipes them, so they're re-created every run.
+scripts/app-clients.sh
+
 cat <<EOF
 
 Notch is up. Watch:   kubectl -n argocd get applications -w
