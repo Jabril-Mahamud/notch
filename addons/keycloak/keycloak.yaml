@@ -1,0 +1,96 @@
+# OIDC provider for the platform: kubectl (apiserver), ArgoCD and Grafana trust
+# https://keycloak.notch.localhost/realms/notch. That URL must resolve to the
+# ingress for browser, pods and apiserver alike (kind-up.sh step 9).
+# ponytail: start-dev with H2 on an emptyDir, one replica. The realm import is
+# the state; a real environment wants `start` on Postgres (a NotchPostgres claim).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: keycloak }
+  template:
+    metadata:
+      labels: { app: keycloak }
+      annotations:
+        # Realm edits only apply on import, i.e. a restart.
+        reloader.stakater.com/auto: "true"
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.8.1
+          args: ["start-dev", "--import-realm"]
+          envFrom:
+            - secretRef: { name: keycloak-secrets }
+          env:
+            # Fixed public URL: tokens carry it as `iss` whoever asks.
+            - { name: KC_HOSTNAME, value: "https://keycloak.notch.localhost" }
+            # TLS ends at the ingress; trust its X-Forwarded-* headers.
+            - { name: KC_PROXY_HEADERS, value: xforwarded }
+            - { name: KC_HTTP_ENABLED, value: "true" }
+            - { name: KC_HEALTH_ENABLED, value: "true" }
+            - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: admin }
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: keycloak-secrets, key: KEYCLOAK_ADMIN_PASSWORD } }
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: management, containerPort: 9000 }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: management }
+          # JVM start plus realm import takes a while on Kind.
+          startupProbe:
+            httpGet: { path: /health/started, port: management }
+            failureThreshold: 60
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 512Mi }
+            limits: { memory: 1Gi }
+          volumeMounts:
+            - { name: realm, mountPath: /opt/keycloak/data/import, readOnly: true }
+            - { name: data, mountPath: /opt/keycloak/data/h2 }
+      volumes:
+        - name: realm
+          configMap: { name: keycloak-realm }
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  selector: { app: keycloak }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    cert-manager.io/cluster-issuer: notch-ca
+    # Keycloak's auth cookies and headers outgrow nginx's 4k default buffer (502 on login).
+    nginx.ingress.kubernetes.io/proxy-buffer-size: 128k
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [keycloak.notch.localhost]
+      secretName: keycloak-tls
+  rules:
+    - host: keycloak.notch.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: keycloak, port: { name: http } }
