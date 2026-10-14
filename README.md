@@ -15,7 +15,7 @@ notch new <name>            # scaffold a FastAPI + Next.js + Postgres app and de
 notch add <repo>            # deploy any repo or GitHub starter, Dockerfile optional
 notch list                  # see what's running
 notch logs <service>        # tail a service
-notch tenant create <team>  # isolated namespace + scoped kubeconfig
+notch tenant create <team>  # isolated namespace + kubeconfig (Keycloak login)
 notch pause / resume / down # stop, restart or delete the cluster
 ```
 
@@ -57,9 +57,20 @@ Rerunning `notch add` on an existing service rebuilds it; if the source moved, t
 
 A tenant is a team with its own namespace, RBAC, quota and network policies on the shared cluster.
 
+## Sign-in
+
+One identity for everything: Keycloak at `https://keycloak.notch.localhost` (realm `notch`). `notch up` creates the users `jabril`, `alice` and `bob`; their password is `NOTCH_USER_PASSWORD` in `~/.config/notch/keycloak.env`. Keycloak groups decide what you get:
+
+| Group | kubectl | ArgoCD (`https://argocd.notch.localhost`) | Grafana (`https://grafana.notch.localhost`) |
+|:--|:--|:--|:--|
+| `notch-admins` | cluster-admin | admin | Admin |
+| `<tenant>` (e.g. `team-alpha`) | `edit` in that namespace | read-only | Viewer |
+
+Add someone to a team by adding them to the Keycloak group; nothing in the cluster changes.
+
 ```bash
 notch tenant create team-alpha                 # pushes tenants/team-alpha/, writes team-alpha.kubeconfig
-export KUBECONFIG=$PWD/team-alpha.kubeconfig   # edit rights in team-alpha only, 24h token
+export KUBECONFIG=$PWD/team-alpha.kubeconfig   # logs in via Keycloak (kubelogin); edit rights in team-alpha only
 ```
 
 Tenant services live in `tenants/<tenant>/services/<svc>/` (same `service.yaml` + `local/values.yaml` as platform services) and deploy into the tenant's namespace. Quota defaults are in `charts/notch-tenant/values.yaml`; override any key under `tenant.quota` in the tenant's `platform.yaml`.
