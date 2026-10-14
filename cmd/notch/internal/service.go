@@ -12,11 +12,13 @@ import (
 
 type Service struct {
 	Name       string
-	Port       int // single-image services only
+	Port       int    // single-image services only
+	Tag        string // image tag, see ImageTag
 	Postgres   bool
 	Secrets    []string
 	Components []Component // monorepos: one container each, split by path
 }
+
 
 var (
 	// Name becomes the namespace, Deployment and Ingress name: DNS label rules.
@@ -134,7 +136,7 @@ service:
 `))
 
 // Host keeps the :8080 Kind port mapping; the chart strips it for the Ingress.
-var valuesTmpl = template.Must(template.New("values").Parse(`service:
+var valuesTmpl = template.Must(template.New("values").Funcs(template.FuncMap{"ref": ImageRef}).Parse(`service:
   endpoints:
     internal:
       hosts:
@@ -145,12 +147,12 @@ var valuesTmpl = template.Must(template.New("values").Parse(`service:
 {{- range .Components}}
       {{.Name}}:
         image:
-          ref: {{$.Name}}-{{.Name}}:local
+          ref: {{ref (printf "%s-%s" $.Name .Name) $.Tag}}
 {{- end}}
 {{- else}}
       app:
         image:
-          ref: {{.Name}}:local
+          ref: {{ref .Name .Tag}}
 {{- end}}
 `))
 

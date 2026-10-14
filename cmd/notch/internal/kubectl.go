@@ -42,12 +42,6 @@ func CreateSecret(name string, keys, values []string) error {
 	return nil
 }
 
-// Restart rolls a service's pods. Images are tagged :local, so a rebuilt image
-// under the same tag is only picked up by new pods.
-func Restart(name string) error {
-	return Kubectl("-n", name, "rollout", "restart", "deploy/"+name)
-}
-
 // kind.yaml maps host 8080 to the ingress controller; Ingress hosts carry no port.
 const ingressPort = "8080"
 

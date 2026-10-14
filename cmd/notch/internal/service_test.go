@@ -101,7 +101,7 @@ func TestValidSecretKey(t *testing.T) {
 
 func TestWriteService(t *testing.T) {
 	root := t.TempDir()
-	dir, err := WriteService(root, Service{Name: "hello", Port: 8000, Postgres: true, Secrets: []string{"APP_JWT_SECRET"}})
+	dir, err := WriteService(root, Service{Name: "hello", Port: 8000, Tag: "abc1234", Postgres: true, Secrets: []string{"APP_JWT_SECRET"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestWriteService(t *testing.T) {
 			t.Errorf("service.yaml missing %q:\n%s", want, svc)
 		}
 	}
-	for _, want := range []string{"hello.notch.localhost:8080", "ref: hello:local"} {
+	for _, want := range []string{"hello.notch.localhost:8080", "ref: localhost:5001/hello:abc1234"} {
 		if !strings.Contains(string(vals), want) {
 			t.Errorf("values.yaml missing %q:\n%s", want, vals)
 		}
@@ -136,9 +136,9 @@ func TestWriteServiceRendersWithChart(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not installed")
 	}
-	mono := Service{Name: "mono", Postgres: true, Components: []Component{
+	mono := Service{Name: "mono", Tag: "abc1234", Postgres: true, Components: []Component{
 		{Name: "backend", Port: 8001, Path: "/api"}, {Name: "frontend", Port: 3001, Path: "/"}}}
-	for _, s := range []Service{{Name: "plain", Port: 3000}, {Name: "full", Port: 8000, Postgres: true, Secrets: []string{"A", "B"}}, mono} {
+	for _, s := range []Service{{Name: "plain", Port: 3000, Tag: "abc1234"}, {Name: "full", Port: 8000, Tag: "abc1234", Postgres: true, Secrets: []string{"A", "B"}}, mono} {
 		dir, err := WriteService(t.TempDir(), s)
 		if err != nil {
 			t.Fatal(err)
@@ -152,7 +152,7 @@ func TestWriteServiceRendersWithChart(t *testing.T) {
 }
 
 func TestWriteServiceComponents(t *testing.T) {
-	dir, err := WriteService(t.TempDir(), Service{Name: "journal", Components: []Component{
+	dir, err := WriteService(t.TempDir(), Service{Name: "journal", Tag: "abc1234", Components: []Component{
 		{Name: "backend", Port: 8001, Path: "/api"}, {Name: "frontend", Port: 3001, Path: "/"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestWriteServiceComponents(t *testing.T) {
 			t.Errorf("service.yaml missing %q:\n%s", want, svc)
 		}
 	}
-	for _, want := range []string{"ref: journal-backend:local", "ref: journal-frontend:local"} {
+	for _, want := range []string{"ref: localhost:5001/journal-backend:abc1234", "ref: localhost:5001/journal-frontend:abc1234"} {
 		if !strings.Contains(string(vals), want) {
 			t.Errorf("values.yaml missing %q:\n%s", want, vals)
 		}
