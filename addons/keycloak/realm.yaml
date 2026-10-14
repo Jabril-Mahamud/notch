@@ -1,0 +1,167 @@
+# The notch realm, imported on every Keycloak start (state lives on an emptyDir,
+# so this file is the source of truth). Groups map to platform roles: notch-admins
+# = cluster-admin / ArgoCD admin / Grafana Admin, team-* = their tenant namespace.
+# ${VAR} placeholders are filled from keycloak-secrets (kind-up.sh), so no
+# credential is in git.
+# ponytail: directAccessGrants (password grant) on every client, for kuttl and
+# scripted logins. Off for any real environment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+data:
+  notch-realm.json: |
+    {
+      "realm": "notch",
+      "enabled": true,
+      "groups": [
+        {
+          "name": "notch-admins"
+        },
+        {
+          "name": "team-alpha"
+        },
+        {
+          "name": "team-beta"
+        }
+      ],
+      "users": [
+        {
+          "username": "jabril",
+          "enabled": true,
+          "email": "jabril@notch.localhost",
+          "emailVerified": true,
+          "firstName": "Jabril",
+          "lastName": "Notch",
+          "credentials": [
+            {
+              "type": "password",
+              "value": "${NOTCH_USER_PASSWORD}",
+              "temporary": false
+            }
+          ],
+          "groups": [
+            "/notch-admins"
+          ]
+        },
+        {
+          "username": "alice",
+          "enabled": true,
+          "email": "alice@notch.localhost",
+          "emailVerified": true,
+          "firstName": "Alice",
+          "lastName": "Notch",
+          "credentials": [
+            {
+              "type": "password",
+              "value": "${NOTCH_USER_PASSWORD}",
+              "temporary": false
+            }
+          ],
+          "groups": [
+            "/team-alpha"
+          ]
+        },
+        {
+          "username": "bob",
+          "enabled": true,
+          "email": "bob@notch.localhost",
+          "emailVerified": true,
+          "firstName": "Bob",
+          "lastName": "Notch",
+          "credentials": [
+            {
+              "type": "password",
+              "value": "${NOTCH_USER_PASSWORD}",
+              "temporary": false
+            }
+          ],
+          "groups": [
+            "/team-beta"
+          ]
+        }
+      ],
+      "clients": [
+        {
+          "clientId": "kubernetes",
+          "publicClient": true,
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "redirectUris": [
+            "http://localhost:8000/*",
+            "http://localhost:18000/*"
+          ],
+          "protocolMappers": [
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "config": {
+                "claim.name": "groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "argocd",
+          "publicClient": false,
+          "secret": "${ARGOCD_CLIENT_SECRET}",
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "redirectUris": [
+            "https://argocd.notch.localhost/auth/callback"
+          ],
+          "webOrigins": [
+            "https://argocd.notch.localhost"
+          ],
+          "protocolMappers": [
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "config": {
+                "claim.name": "groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "grafana",
+          "publicClient": false,
+          "secret": "${GRAFANA_CLIENT_SECRET}",
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "redirectUris": [
+            "https://grafana.notch.localhost/login/generic_oauth"
+          ],
+          "webOrigins": [
+            "https://grafana.notch.localhost"
+          ],
+          "protocolMappers": [
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "config": {
+                "claim.name": "groups",
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        }
+      ]
+    }

@@ -1,0 +1,27 @@
+# Keycloak: the issuer is served at the URL everyone verifies against, and a
+# login yields tokens whose groups claim carries the user's Keycloak groups.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+status:
+  readyReplicas: 1
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      CA="${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt"
+      ISSUER=https://keycloak.notch.localhost/realms/notch
+      curl -sf --cacert "$CA" "$ISSUER/.well-known/openid-configuration" | grep -q "\"issuer\":\"$ISSUER\""
+      PW=$(kubectl -n keycloak get secret keycloak-secrets -o jsonpath='{.data.NOTCH_USER_PASSWORD}' | base64 -d)
+      groups() { # user -> groups claim of an id_token from the kubernetes client
+        curl -sf --cacert "$CA" "$ISSUER/protocol/openid-connect/token" \
+          -d grant_type=password -d client_id=kubernetes -d scope=openid -d username="$1" -d password="$PW" |
+          python3 -c 'import sys,json,base64; t=json.load(sys.stdin)["id_token"].split(".")[1]; print(",".join(json.loads(base64.urlsafe_b64decode(t+"==")).get("groups",[])))'
+      }
+      [ "$(groups jabril)" = notch-admins ]
+      [ "$(groups alice)" = team-alpha ]
+      [ "$(groups bob)" = team-beta ]

@@ -70,6 +70,21 @@ kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -
 kubectl -n cert-manager create secret tls notch-ca \
   --cert="$NOTCH_HOME/ca/ca.crt" --key="$NOTCH_HOME/ca/ca.key" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
+# Keycloak credentials: generated once, kept with the CA so a recreated cluster
+# keeps the same logins and client secrets. The realm reads them as ${VAR}s.
+if [ ! -f "$NOTCH_HOME/keycloak.env" ]; then
+  (umask 077; cat > "$NOTCH_HOME/keycloak.env" <<EOF
+KEYCLOAK_ADMIN_PASSWORD=$(openssl rand -hex 16)
+NOTCH_USER_PASSWORD=$(openssl rand -hex 12)
+ARGOCD_CLIENT_SECRET=$(openssl rand -hex 24)
+GRAFANA_CLIENT_SECRET=$(openssl rand -hex 24)
+EOF
+  )
+fi
+kubectl create namespace keycloak --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n keycloak create secret generic keycloak-secrets --from-env-file="$NOTCH_HOME/keycloak.env" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
 # Step 7: ArgoCD bootstrap; addons from platform.yaml come through it later
 if ! helm status argocd -n argocd >/dev/null 2>&1; then
   helm repo add argo https://argoproj.github.io/argo-helm >/dev/null 2>&1 || true
@@ -108,4 +123,5 @@ Notch is up. Watch:   kubectl -n argocd get applications -w
 ArgoCD UI:            kubectl -n argocd port-forward svc/argocd-server 8443:443  (https://localhost:8443, user admin)
 Password:             kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 Apps, once synced:    https://<service>.notch.localhost  (trust: curl --cacert $NOTCH_HOME/ca/ca.crt)
+Logins (Keycloak):    jabril (admin), alice (team-alpha), bob (team-beta); password: NOTCH_USER_PASSWORD in $NOTCH_HOME/keycloak.env
 EOF
