@@ -44,6 +44,13 @@
 {{- range $k, $v := dict "OTEL_EXPORTER_OTLP_ENDPOINT" $.Values.otlpEndpoint "OTEL_EXPORTER_OTLP_PROTOCOL" "http/protobuf" "OTEL_SERVICE_NAME" $name "OTEL_METRICS_EXPORTER" "none" "OTEL_LOGS_EXPORTER" "none" }}
 {{- $platform = append $platform (dict "name" $k "value" $v) }}
 {{- end }}
+{{- if $svc.auth }}
+{{- /* The secret has no other route in: scripts/app-clients.sh writes it to notch-secrets, ESO syncs it */}}
+{{- if not (has "OIDC_CLIENT_SECRET" ($svc.secrets | default list)) }}{{ fail "auth needs OIDC_CLIENT_SECRET in secrets" }}{{ end }}
+{{- /* Realm clients are global, so tenant services get the tenant-prefixed id */}}
+{{- $platform = concat $platform (list (dict "name" "OIDC_ISSUER" "value" $.Values.oidcIssuer) (dict "name" "OIDC_CLIENT_ID" "value" (include "notch.id" $))) }}
+{{- $platform = append $platform (dict "name" "OIDC_CLIENT_SECRET" "valueFrom" (dict "secretKeyRef" (dict "name" (printf "%s-secrets" $name) "key" "OIDC_CLIENT_SECRET"))) }}
+{{- end }}
 {{- /* A container var replaces the platform one of the same name; duplicates break server-side apply */}}
 {{- $own := dict }}
 {{- range $c.env }}{{ $_ := set $own .name true }}{{ end }}

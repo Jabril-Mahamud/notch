@@ -80,6 +80,9 @@ check "every container exports traces to Tempo over OTLP/HTTP" \
 check "trace service name is the service name" \
   '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "OTEL_SERVICE_NAME" and .value == "hello")'
 
+check "no auth: no OIDC_* env" \
+  '[.[] | select(.kind == "Deployment") | .spec.template.spec.containers[].env[].name | select(startswith("OIDC_"))] == []'
+
 check "DATABASE_URL built from the PG vars (the common convention)" \
   '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "DATABASE_URL" and .value == "postgresql://$(PGUSER):$(PGPASSWORD)@$(PGHOST):$(PGPORT)/$(PGDATABASE)")'
 check "DATABASE_URL after the vars it expands (k8s only expands earlier ones)" \
@@ -111,6 +114,11 @@ check "PGDATABASE is the prefixed database" \
   '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "PGDATABASE" and .value == "team-alpha-hello")'
 check "source secret prefixed in notch-secrets" \
   '.[] | select(.kind == "ExternalSecret") | .spec.data[0].remoteRef.key == "team-alpha-hello-secrets" and .spec.target.name == "hello-secrets"'
+
+# auth: true gets Keycloak OIDC env (full checks in tests/app-oidc.sh)
+OUT=$(render auth-app)
+check "auth service gets OIDC_ISSUER" \
+  '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].env | any(.name == "OIDC_ISSUER")'
 
 # Step 2: two containers, path split
 OUT=$(render web)

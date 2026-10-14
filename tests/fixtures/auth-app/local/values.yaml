@@ -1,0 +1,10 @@
+service:
+  endpoints:
+    internal:
+      hosts:
+        - auth-app.notch.localhost:8080
+  deployment:
+    containers:
+      app:
+        image:
+          ref: notch-auth-app:local

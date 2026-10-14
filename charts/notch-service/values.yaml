@@ -11,3 +11,5 @@ service: {}
 secretStore: notch-secrets
 # Tempo's OTLP/HTTP receiver, injected as OTEL_EXPORTER_OTLP_ENDPOINT.
 otlpEndpoint: http://tempo.tempo.svc:4318
+# Keycloak's notch realm, injected as OIDC_ISSUER into auth: true services.
+oidcIssuer: https://keycloak.notch.localhost/realms/notch
