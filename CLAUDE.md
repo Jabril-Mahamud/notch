@@ -1,7 +1,7 @@
 # Notch — repo guidelines
 
 ## What this is
-A self-hosted k8s deployment platform. Point it at a repo (or `notch new` one), it ships. Built on ArgoCD, Crossplane, CloudNativePG, ExternalSecrets, ingress-nginx, kube-prometheus-stack, Loki, Tempo, and Railpack. Local Kind only for now.
+A self-hosted k8s deployment platform. Point it at a repo (or `notch new` one), it ships. Built on ArgoCD, cert-manager, Crossplane, CloudNativePG, ExternalSecrets, ingress-nginx, kube-prometheus-stack, Loki, Tempo, and Railpack. Local Kind only for now.
 
 ## Vocabulary (mirrors Yalla)
 - **Platform** — top-level grouping, has addons + cluster config (`platform.yaml`)
@@ -71,6 +71,7 @@ mise.toml                     ← railpack + kuttl versions
 7. `go:embed` drops dotfiles without `all:`: `public/.gitkeep` vanishes and Next.js `COPY public` fails
 8. SQLAlchemy 2.1 maps `postgresql://` to psycopg 3: templates install `psycopg[binary]`
 9. The apiserver reads a structured AuthenticationConfiguration from `~/.config/notch/auth/config.yaml` (mounted by kind.yaml) and reloads it live: OIDC changes there, not in kind.yaml
+10. Every service Ingress has TLS, so ingress-nginx 308s `http://...:8080` to https: test with `curl --cacert ~/.config/notch/ca/ca.crt https://<host>/`, not plain http (`curl -sf` on a 308 passes vacuously)
 
 ## Reference
 - Vault plan: `~/Documents/openclaw/Projects/k8/Notch/Notch.md`
