@@ -31,7 +31,8 @@ commands:
       for i in $IMAGES; do case $i in localhost:5001/*) ;; *) echo "not from the registry: $i"; exit 1 ;; esac; done
   - script: |
       set -e
-      H=http://demo.notch.localhost:8080
+      H=https://demo.notch.localhost
+      curl() { command curl --cacert "${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt" "$@"; }
       curl -sf $H/ | grep -q 'Hello, world'
       ID=$(curl -sf -X POST $H/api/todos -H 'Content-Type: application/json' -d '{"title":"kuttl"}' | sed -E 's/.*"id":([0-9]+).*/\1/')
       curl -sf $H/api/todos | grep -q '"title":"kuttl"'

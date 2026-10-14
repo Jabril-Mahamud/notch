@@ -27,6 +27,6 @@ kind: TestAssert
 commands:
   - script: |
       set -e
-      curl -sf http://web.team-alpha.notch.localhost:8080/ | grep -q "Hostname: web-"
-      curl -sf http://web.team-beta.notch.localhost:8080/ | grep -q "Hostname: web-"
+      curl -sf --cacert "${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt" https://web.team-alpha.notch.localhost/ | grep -q "Hostname: web-"
+      curl -sf --cacert "${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt" https://web.team-beta.notch.localhost/ | grep -q "Hostname: web-"
       kubectl -n team-alpha get resourcequota team-alpha -o jsonpath='{.status.used.pods}' | grep -qx 1
