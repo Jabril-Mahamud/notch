@@ -23,7 +23,7 @@ Apps are served at `http://<name>.notch.localhost:8080`.
 
 ## How it works
 
-1. `notch add` builds the image, loads it into the cluster and pushes `services/<name>/` to the `dev` branch of this repo
+1. `notch add` builds the image, pushes it to the local registry (`localhost:5001`, tagged with the source's commit sha) and pushes `services/<name>/` to the `dev` branch of this repo
 2. ArgoCD detects the change and syncs
 3. The chart renders: Deployment, Service, Ingress, DB claim, ExternalSecret
 4. Crossplane provisions a Postgres DB per service
@@ -46,7 +46,7 @@ Apps are served at `http://<name>.notch.localhost:8080`.
 
 Secrets are prompted and synced through ExternalSecrets. Services with `postgres: true` get `DATABASE_URL` plus the `PG*` vars; a container's own `env` in `service.yaml` overrides them by name and can use `$(PGUSER)` etc., e.g. for a `postgresql+asyncpg://` scheme.
 
-Rerunning `notch add` on an existing service rebuilds and reloads its image (e.g. after `notch down` / `up`); `--secret` again rotates values.
+Rerunning `notch add` on an existing service rebuilds it; if the source moved, the new tag is committed to `dev` and ArgoCD rolls the pods. The registry outlives the cluster, so after `notch down` / `up` a rerun is only needed to re-enter `--secret` values.
 
 ## Tenants
 

@@ -24,7 +24,8 @@ tenants/<team>/               ← platform.yaml (+ services/<svc>/)
 charts/notch-service/         ← renders a service (Deployment, Ingress, DB, ExternalSecret)
 charts/notch-tenant/          ← renders a tenant (ns, RBAC, quota, netpol)
 cmd/notch/                    ← the CLI (cobra); internal/templates/ = notch new starter
-scripts/kind-up.sh            ← cluster bring-up (notch up)
+scripts/kind-up.sh            ← cluster bring-up (notch up): registry, auth config, kind, ArgoCD
+kind.yaml                     ← node config; changes mean recreating the cluster
 tests/*.sh                    ← static helm/yq assertions; tests/e2e/ = kuttl (live)
 mise.toml                     ← railpack + kuttl versions
 .claude/gotchas.md            ← what broke (gitignored)
@@ -65,16 +66,17 @@ mise.toml                     ← railpack + kuttl versions
 2. Quota on `requests.*`/`limits.*` rejects pods without them: the tenant LimitRange fills defaults. Over-quota tests must set a limit too, or the LimitRange rejects first
 3. Cluster-scoped names (Database, Role, ArgoCD apps, notch-secrets source secrets) collide across tenants: tenant services get a `<tenant>-` prefix (`notch.id`)
 4. k8s only expands `$(VAR)` from env entries earlier in the list: platform env first, container env last, overriding by name (duplicates break SSA)
-5. Images are `:local` and side-loaded, so a rebuild under the same tag needs a rollout restart
+5. Images go to `notch-registry` (`localhost:5001`) with commit-sha tags; a rebuild commits the new tag, never reuses one. Pods resolve `localhost:5001` via the node's `certs.d` hosts.toml (kind-up.sh), which containerd ignores without the `config_path` patch in kind.yaml
 6. `pack` (buildpacks) can't export into Docker's containerd image store: Railpack + buildx instead
 7. `go:embed` drops dotfiles without `all:`: `public/.gitkeep` vanishes and Next.js `COPY public` fails
 8. SQLAlchemy 2.1 maps `postgresql://` to psycopg 3: templates install `psycopg[binary]`
+9. The apiserver reads a structured AuthenticationConfiguration from `~/.config/notch/auth/config.yaml` (mounted by kind.yaml) and reloads it live: OIDC changes there, not in kind.yaml
 
 ## Reference
 - Vault plan: `~/Documents/openclaw/Projects/k8/Notch/Notch.md`
 - Yalla reference (READ ONLY): `/mnt/hdd/projects/work/yalla/`
 - v1 repos (archived on GitHub): `Jabril-Mahamud/notch`, `Jabril-Mahamud/notch-gitops`
-- Test apps, rebuilt after a fresh `notch up` by rerunning:
+- Test apps; images survive `notch down` in the registry, so after a fresh `notch up` rerun these only to restore secrets:
   - hello, a public starter: `notch add https://github.com/heroku/node-js-getting-started --name hello --postgres --secret SESSION_SECRET`
   - demo, scaffolded by `notch new` (todos + Open-Meteo weather): `notch add https://github.com/Jabril-Mahamud/notch-demo --name demo --postgres`
 - Goal: use the CLI like any customer: `notch new`, or `notch add` on any GitHub repo or starter. Dockerfile optional (Railpack builds the rest)

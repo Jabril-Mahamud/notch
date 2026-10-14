@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"time"
 )
 
 // Clone shallow-clones a repo into a temp dir; the caller removes it.
@@ -20,31 +22,79 @@ func Clone(url string) (string, error) {
 	return dir, nil
 }
 
-func ImageRef(name string) string { return name + ":local" }
+// Registry is the notch-registry container (scripts/kind-up.sh). The same
+// name works from the host (docker push) and from the node: containerd maps it
+// to notch-registry:5000 on the kind network (certs.d/localhost:5001/hosts.toml).
+const Registry = "localhost:5001"
+
+func ImageRef(name, tag string) string { return Registry + "/" + name + ":" + tag }
+
+// ImageTag is the source's short commit sha. Tags are immutable, so a new
+// commit means a new ref in values.yaml and ArgoCD rolls the pods; no restart.
+// Uncommitted changes (or no git) add a timestamp, else two builds share a tag.
+func ImageTag(dir string) string {
+	stamp := time.Now().UTC().Format("20060102150405")
+	sha, err := exec.Command("git", "-C", dir, "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return "build-" + stamp
+	}
+	tag := string(sha[:len(sha)-1])
+	if dirty, _ := exec.Command("git", "-C", dir, "status", "--porcelain").Output(); len(dirty) > 0 {
+		tag += "-" + stamp
+	}
+	return tag
+}
+
+// SetImageRefs points each image's `ref:` line in a values file at a new ref,
+// image name -> ref. Line edits, not a re-render, so hand edits survive. Old
+// unprefixed refs (hello:local) match too. Reports whether the file changed.
+func SetImageRefs(path string, refs map[string]string) (bool, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	out := body
+	for image, ref := range refs {
+		// Anchored on "/" or "ref: " so demo never matches demo-backend.
+		re := regexp.MustCompile(`(?m)^(\s*ref:\s*)(?:\S+/)?` + regexp.QuoteMeta(image) + `:\S+$`)
+		if !re.Match(out) {
+			return false, fmt.Errorf("%s: no image ref for %s", path, image)
+		}
+		out = re.ReplaceAll(out, []byte("${1}"+ref))
+	}
+	if string(out) == string(body) {
+		return false, nil
+	}
+	return true, os.WriteFile(path, out, 0o644)
+}
 
 // The plan format moves with railpack; keep this in step with mise.toml.
 const railpackFrontend = "ghcr.io/railwayapp/railpack-frontend:v0.40.1"
 
-// BuildAndLoad builds <name>:local and side-loads it: Kind nodes can't pull
-// from the host's docker daemon. buildArgs are KEY=VALUE, Dockerfile builds only.
-func BuildAndLoad(name, dir string, buildArgs []string) error {
+// BuildAndPush builds ref and pushes it to the notch registry, where the
+// cluster pulls it like any cloud registry. buildArgs are KEY=VALUE,
+// Dockerfile builds only.
+func BuildAndPush(ref, dir string, buildArgs []string) error {
 	var err error
 	switch {
 	case HasDockerfile(dir):
-		err = dockerBuild(name, dir, buildArgs)
+		err = dockerBuild(ref, dir, buildArgs)
 	case len(buildArgs) > 0:
 		err = fmt.Errorf("--build-arg needs a Dockerfile in %s; Railpack builds take none", dir)
 	default:
-		err = railpackBuild(name, dir)
+		err = railpackBuild(ref, dir)
 	}
 	if err != nil {
 		return err
 	}
-	return Run("kind", "load", "docker-image", ImageRef(name), "--name", Cluster)
+	if err := Run("docker", "push", ref); err != nil {
+		return fmt.Errorf("%w (is notch-registry running? notch up starts it)", err)
+	}
+	return nil
 }
 
-func dockerBuild(name, dir string, buildArgs []string) error {
-	args := []string{"build", "-t", ImageRef(name)}
+func dockerBuild(ref, dir string, buildArgs []string) error {
+	args := []string{"build", "-t", ref}
 	for _, a := range buildArgs {
 		args = append(args, "--build-arg", a)
 	}
@@ -55,7 +105,7 @@ func dockerBuild(name, dir string, buildArgs []string) error {
 // Railpack's BuildKit frontend. ponytail: chosen over Cloud Native Buildpacks
 // because pack can't export into Docker's containerd image store; this is
 // plain buildx, so it works wherever docker build does.
-func railpackBuild(name, dir string) error {
+func railpackBuild(ref, dir string) error {
 	if _, err := exec.LookPath("railpack"); err != nil {
 		return fmt.Errorf("no Dockerfile in %s and railpack isn't installed: run `mise install` in the notch repo", dir)
 	}
@@ -69,6 +119,6 @@ func railpackBuild(name, dir string) error {
 	if err := Run("railpack", "prepare", dir, "--plan-out", plan); err != nil {
 		return err
 	}
-	return Run("docker", "buildx", "build", "--load", "-t", ImageRef(name),
+	return Run("docker", "buildx", "build", "--load", "-t", ref,
 		"--build-arg", "BUILDKIT_SYNTAX="+railpackFrontend, "-f", plan, dir)
 }

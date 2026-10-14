@@ -21,11 +21,12 @@ var (
 
 var addCmd = &cobra.Command{
 	Use:   "add <repo-or-path>",
-	Short: "Build a repo (Dockerfile or auto-detected), load it into Kind and deploy it as a service",
-	Long: `Build a repo (Dockerfile or auto-detected), load it into Kind and deploy it as a service.
+	Short: "Build a repo (Dockerfile or auto-detected), push it to the notch registry and deploy it as a service",
+	Long: `Build a repo (Dockerfile or auto-detected), push it to the notch registry and deploy it as a service.
 
-Rerunning on an existing service rebuilds and reloads its image, e.g. after
-notch down/up. Pass --secret again to recreate secrets on a fresh cluster.`,
+Images are tagged with the source's commit sha. Rerunning on an existing
+service rebuilds, and commits the new tag to dev if the source moved, so
+ArgoCD rolls the pods. Pass --secret again to recreate secrets on a fresh cluster.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runAdd,
 }
@@ -56,20 +57,16 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	dir := filepath.Join("services", svc.Name)
 	_, statErr := os.Stat(filepath.Join(root, dir))
 	exists := statErr == nil
-	// Only a new service commits; a rebuild works from any branch.
-	if !exists {
-		if err := internal.OnDev(root); err != nil {
-			return err
-		}
+	// Both paths commit: a new service, or a rebuild's new image tag.
+	if err := internal.OnDev(root); err != nil {
+		return err
 	}
-	if err := buildWithSecrets(svc, src); err != nil {
+	refs, err := buildWithSecrets(svc, src)
+	if err != nil {
 		return err
 	}
 	if exists {
-		fmt.Printf("service %s exists, image rebuilt and loaded\n", svc.Name)
-		// On a fresh cluster the Deployment may not exist yet; it starts on the new image anyway.
-		_ = internal.Restart(svc.Name)
-		return nil
+		return redeploy(root, dir, svc, refs)
 	}
 	if _, err := internal.WriteService(root, svc); err != nil {
 		return err
@@ -81,19 +78,35 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func buildWithSecrets(svc internal.Service, src string) error {
-	// Prompt before the slow build so nobody has to babysit it.
-	values, err := promptSecrets(svc.Secrets)
+// redeploy points an existing service at the images just pushed. Same tag
+// (source unchanged, e.g. rerun after notch up to restore secrets) = no commit.
+func redeploy(root, dir string, svc internal.Service, refs map[string]string) error {
+	changed, err := internal.SetImageRefs(filepath.Join(root, dir, "local", "values.yaml"), refs)
 	if err != nil {
 		return err
 	}
-	if err := build(svc, src); err != nil {
-		return err
-	}
-	if len(svc.Secrets) == 0 {
+	if !changed {
+		fmt.Printf("service %s already runs %s\n", svc.Name, svc.Tag)
 		return nil
 	}
-	return internal.CreateSecret(svc.Name, svc.Secrets, values)
+	if err := internal.Publish(root, dir, "chore: deploy "+svc.Name+" "+svc.Tag); err != nil {
+		return err
+	}
+	fmt.Printf("service %s rolling out %s, run `notch list` to check status\n", svc.Name, svc.Tag)
+	return nil
+}
+
+func buildWithSecrets(svc internal.Service, src string) (map[string]string, error) {
+	// Prompt before the slow build so nobody has to babysit it.
+	values, err := promptSecrets(svc.Secrets)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := build(svc, src)
+	if err != nil || len(svc.Secrets) == 0 {
+		return refs, err
+	}
+	return refs, internal.CreateSecret(svc.Name, svc.Secrets, values)
 }
 
 // source returns a local directory for the repo, cloning remotes.
@@ -108,14 +121,16 @@ func source(arg string) (string, func(), error) {
 	return dir, func() { os.RemoveAll(dir) }, nil
 }
 
-// build makes one image per component, or one for the whole repo.
-func build(svc internal.Service, src string) error {
+// build pushes one image per component, or one for the whole repo, and
+// returns image name -> ref.
+func build(svc internal.Service, src string) (map[string]string, error) {
 	args, err := internal.ParseBuildArgs(addBuildArg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(svc.Components) == 0 {
-		return internal.BuildAndLoad(svc.Name, src, args[""])
+		ref := internal.ImageRef(svc.Name, svc.Tag)
+		return map[string]string{svc.Name: ref}, internal.BuildAndPush(ref, src, args[""])
 	}
 	known := map[string]bool{}
 	var names []string
@@ -125,15 +140,18 @@ func build(svc internal.Service, src string) error {
 	}
 	for comp := range args {
 		if !known[comp] {
-			return fmt.Errorf("--build-arg for %q, but the components are %v", comp, names)
+			return nil, fmt.Errorf("--build-arg for %q, but the components are %v", comp, names)
 		}
 	}
+	refs := map[string]string{}
 	for _, c := range svc.Components {
-		if err := internal.BuildAndLoad(svc.Name+"-"+c.Name, c.Dir, args[c.Name]); err != nil {
-			return err
+		image := svc.Name + "-" + c.Name
+		refs[image] = internal.ImageRef(image, svc.Tag)
+		if err := internal.BuildAndPush(refs[image], c.Dir, args[c.Name]); err != nil {
+			return nil, err
 		}
 	}
-	return nil
+	return refs, nil
 }
 
 func describe(arg, src string) (internal.Service, error) {
@@ -163,7 +181,7 @@ func describe(arg, src string) (internal.Service, error) {
 			return internal.Service{}, fmt.Errorf("secret %q isn't a valid env var name", k)
 		}
 	}
-	return internal.Service{Name: name, Port: port, Postgres: addPostgres, Secrets: addSecrets, Components: comps}, nil
+	return internal.Service{Name: name, Port: port, Tag: internal.ImageTag(src), Postgres: addPostgres, Secrets: addSecrets, Components: comps}, nil
 }
 
 // ponytail: input echoes. Swap in golang.org/x/term ReadPassword if that matters.
