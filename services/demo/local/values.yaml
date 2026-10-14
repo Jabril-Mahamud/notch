@@ -7,7 +7,7 @@ service:
     containers:
       backend:
         image:
-          ref: demo-backend:local
+          ref: localhost:5001/demo-backend:2cb2a8b
       frontend:
         image:
-          ref: demo-frontend:local
+          ref: localhost:5001/demo-frontend:2cb2a8b
