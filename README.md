@@ -45,13 +45,15 @@ sudo trust anchor --store ~/.config/notch/ca/ca.crt   # system + browsers (Arch/
 
 ## Any repo
 
-`notch add <path-or-git-url> [--name N] [--postgres] [--secret KEY ...] [--build-arg [component:]KEY=VALUE ...]`
+`notch add <path-or-git-url> [--name N] [--postgres] [--auth] [--secret KEY ...] [--build-arg [component:]KEY=VALUE ...]`
 
 - **Dockerfile at the root**: built as is.
 - **No Dockerfile**: [Railpack](https://railpack.com/) detects the stack and start command (Node, Python, Go, ...). The container gets `PORT`.
 - **Monorepo**: `frontend/` + `backend/` (or `apps/frontend` + `apps/backend`), each with a Dockerfile, become one service: frontend at `/`, backend at `/api`, same host. Frontends that bake the API URL in at build time get it with `--build-arg frontend:NEXT_PUBLIC_API_URL=/api`.
 
 Secrets are prompted and synced through ExternalSecrets. Services with `postgres: true` get `DATABASE_URL` plus the `PG*` vars; a container's own `env` in `service.yaml` overrides them by name and can use `$(PGUSER)` etc., e.g. for a `postgresql+asyncpg://` scheme.
+
+`--auth` (`auth: true`, the default for `notch new`) registers a Keycloak client for the service and injects `OIDC_ISSUER`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`. The app validates tokens itself; Notch only hands it the config. Clients are re-created on every `notch up`, since Keycloak re-imports its realm on start.
 
 Rerunning `notch add` on an existing service rebuilds it; if the source moved, the new tag is committed to `dev` and ArgoCD rolls the pods. The registry outlives the cluster, so after `notch down` / `up` a rerun is only needed to re-enter `--secret` values.
 

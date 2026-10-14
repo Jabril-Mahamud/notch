@@ -15,6 +15,7 @@ import (
 var (
 	addSecrets  []string
 	addPostgres bool
+	addAuth     bool
 	addName     string
 	addBuildArg []string
 )
@@ -34,6 +35,7 @@ ArgoCD rolls the pods. Pass --secret again to recreate secrets on a fresh cluste
 func init() {
 	addCmd.Flags().StringArrayVar(&addSecrets, "secret", nil, "secret env var the service needs (repeatable); value is prompted")
 	addCmd.Flags().BoolVar(&addPostgres, "postgres", false, "provision a Postgres database for the service")
+	addCmd.Flags().BoolVar(&addAuth, "auth", false, "register a Keycloak OIDC client and inject OIDC_* env")
 	addCmd.Flags().StringVar(&addName, "name", "", "service name (default: from the repo name)")
 	addCmd.Flags().StringArrayVar(&addBuildArg, "build-arg", nil, "docker build arg, [component:]KEY=VALUE (repeatable), e.g. frontend:NEXT_PUBLIC_API_URL=/api")
 	rootCmd.AddCommand(addCmd)
@@ -70,6 +72,12 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 	if _, err := internal.WriteService(root, svc); err != nil {
 		return err
+	}
+	// Before the push, so OIDC_CLIENT_SECRET is there when ESO first syncs.
+	if svc.Auth {
+		if err := internal.AppClients(root, dir); err != nil {
+			return err
+		}
 	}
 	if err := internal.Publish(root, dir, "feat: add "+svc.Name+" service"); err != nil {
 		return err
@@ -181,7 +189,7 @@ func describe(arg, src string) (internal.Service, error) {
 			return internal.Service{}, fmt.Errorf("secret %q isn't a valid env var name", k)
 		}
 	}
-	return internal.Service{Name: name, Port: port, Tag: internal.ImageTag(src), Postgres: addPostgres, Secrets: addSecrets, Components: comps}, nil
+	return internal.Service{Name: name, Port: port, Tag: internal.ImageTag(src), Postgres: addPostgres, Auth: addAuth, Secrets: addSecrets, Components: comps}, nil
 }
 
 // ponytail: input echoes. Swap in golang.org/x/term ReadPassword if that matters.

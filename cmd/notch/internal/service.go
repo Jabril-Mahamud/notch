@@ -15,7 +15,8 @@ type Service struct {
 	Port       int    // single-image services only
 	Tag        string // image tag, see ImageTag
 	Postgres   bool
-	Secrets    []string
+	Auth       bool        // Keycloak OIDC client; see scripts/app-clients.sh
+	Secrets    []string    // prompted from the user; auth adds OIDC_CLIENT_SECRET itself
 	Components []Component // monorepos: one container each, split by path
 }
 
@@ -126,10 +127,16 @@ service:
 {{- if .Postgres}}
   postgres: true
 {{- end}}
-{{- if .Secrets}}
+{{- if .Auth}}
+  auth: true
+{{- end}}
+{{- if or .Secrets .Auth}}
   secrets:
 {{- range .Secrets}}
     - {{.}}
+{{- end}}
+{{- if .Auth}}
+    - OIDC_CLIENT_SECRET
 {{- end}}
 {{- end}}
 `))

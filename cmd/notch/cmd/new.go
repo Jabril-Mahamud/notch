@@ -16,7 +16,14 @@ var newCmd = &cobra.Command{
 	RunE:  runNew,
 }
 
-func init() { rootCmd.AddCommand(newCmd) }
+// Own var, not addAuth: a shared one would make true the default for notch add too.
+var newAuth bool
+
+func init() {
+	// ponytail: platform plumbing only; the starter reading OIDC_* is a follow-up.
+	newCmd.Flags().BoolVar(&newAuth, "auth", true, "register a Keycloak OIDC client and inject OIDC_* env")
+	rootCmd.AddCommand(newCmd)
+}
 
 func runNew(cmd *cobra.Command, args []string) error {
 	name := args[0]
@@ -36,7 +43,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Printf("scaffolded %s, deploying\n", dir)
-	addName, addPostgres = name, true
+	addName, addPostgres, addAuth = name, true, newAuth
 	return runAdd(cmd, []string{dir})
 }
 
