@@ -1,7 +1,7 @@
 # Notch — repo guidelines
 
 ## What this is
-A self-hosted k8s deployment platform. Point it at a repo, it ships. Built on ArgoCD, Crossplane, CloudNativePG, ExternalSecrets, ingress-nginx, kube-prometheus-stack, Loki, and Tempo.
+A self-hosted k8s deployment platform. Point it at a repo (or `notch new` one), it ships. Built on ArgoCD, Crossplane, CloudNativePG, ExternalSecrets, ingress-nginx, kube-prometheus-stack, Loki, Tempo, and Railpack. Local Kind only for now.
 
 ## Vocabulary (mirrors Yalla)
 - **Platform** — top-level grouping, has addons + cluster config (`platform.yaml`)
@@ -13,15 +13,27 @@ A self-hosted k8s deployment platform. Point it at a repo, it ships. Built on Ar
 
 ## Repo structure
 ```
-platform.yaml              ← platform definition, addons, cluster config
-tenants/                   ← multi-tenant (Phase 2)
-services/                  ← platform-level services (Phase 1)
-charts/notch-service/      ← the Helm chart that renders services
-scripts/kind-up.sh         ← cluster bring-up
-cmd/notch/                 ← the CLI
-tests/                     ← helm lint, template assertions, kuttl
-.claude/gotchas.md         ← what broke (gitignored)
+platform.yaml                 ← platform definition, addons, cluster config
+clusters/kind.yaml            ← root app (tracks dev), applied by kind-up.sh
+addons/                       ← one ArgoCD Application per addon, sync-waved
+  services.yaml               ← ApplicationSet: services/* → charts/notch-service
+  tenants.yaml                ← ApplicationSet: tenants/* → charts/notch-tenant
+  tenant-services.yaml        ← ApplicationSet: tenants/*/services/* into the tenant ns
+services/<name>/              ← service.yaml + local/values.yaml (written by notch add)
+tenants/<team>/               ← platform.yaml (+ services/<svc>/)
+charts/notch-service/         ← renders a service (Deployment, Ingress, DB, ExternalSecret)
+charts/notch-tenant/          ← renders a tenant (ns, RBAC, quota, netpol)
+cmd/notch/                    ← the CLI (cobra); internal/templates/ = notch new starter
+scripts/kind-up.sh            ← cluster bring-up (notch up)
+tests/*.sh                    ← static helm/yq assertions; tests/e2e/ = kuttl (live)
+mise.toml                     ← railpack + kuttl versions
+.claude/gotchas.md            ← what broke (gitignored)
 ```
+
+## Workflow
+- Feature branch → PR into `dev` → merge after tests pass. ArgoCD tracks `dev`, so live tests need the push.
+- Phase release: `dev` → `main` PR, reviewed by Jabril, squash merged, then `main` merged back into `dev`.
+- Before merging: `tests/*.sh`, `go test ./...` in `cmd/notch`, and `tests/e2e.sh` on a running cluster.
 
 ## Rules
 - Conventional commits, imperative, lowercase: `feat: add kind-up script`
@@ -48,9 +60,21 @@ tests/                     ← helm lint, template assertions, kuttl
 11. ArgoCD "Healthy" can mean "never applied" — check OutOfSync apps
 12. Failed auto-sync isn't retried until revision changes — fix the spec AND hit Sync
 
+## v2 gotchas
+1. kuttl `script:` runs via `sh -c`: without `set -e` only the last line counts, and `! cmd` never trips `set -e`. Expected failures: `if cmd; then exit 1; fi`
+2. Quota on `requests.*`/`limits.*` rejects pods without them: the tenant LimitRange fills defaults. Over-quota tests must set a limit too, or the LimitRange rejects first
+3. Cluster-scoped names (Database, Role, ArgoCD apps, notch-secrets source secrets) collide across tenants: tenant services get a `<tenant>-` prefix (`notch.id`)
+4. k8s only expands `$(VAR)` from env entries earlier in the list: platform env first, container env last, overriding by name (duplicates break SSA)
+5. Images are `:local` and side-loaded, so a rebuild under the same tag needs a rollout restart
+6. `pack` (buildpacks) can't export into Docker's containerd image store: Railpack + buildx instead
+7. `go:embed` drops dotfiles without `all:`: `public/.gitkeep` vanishes and Next.js `COPY public` fails
+8. SQLAlchemy 2.1 maps `postgresql://` to psycopg 3: templates install `psycopg[binary]`
+
 ## Reference
 - Vault plan: `~/Documents/openclaw/Projects/k8/Notch/Notch.md`
 - Yalla reference (READ ONLY): `/mnt/hdd/projects/work/yalla/`
 - v1 repos (archived on GitHub): `Jabril-Mahamud/notch`, `Jabril-Mahamud/notch-gitops`
-- hello is a public starter deployed the customer way: `notch add https://github.com/heroku/node-js-getting-started --name hello --postgres --secret SESSION_SECRET`. Rerun after `notch up` to rebuild its image
-- Goal: `notch add` works on any GitHub repo or starter. Dockerfile optional (Railpack builds the rest)
+- Test apps, rebuilt after a fresh `notch up` by rerunning:
+  - hello, a public starter: `notch add https://github.com/heroku/node-js-getting-started --name hello --postgres --secret SESSION_SECRET`
+  - demo, scaffolded by `notch new` (todos + Open-Meteo weather): `notch add https://github.com/Jabril-Mahamud/notch-demo --name demo --postgres`
+- Goal: use the CLI like any customer: `notch new`, or `notch add` on any GitHub repo or starter. Dockerfile optional (Railpack builds the rest)
