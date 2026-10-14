@@ -51,9 +51,9 @@ mv "$NOTCH_HOME/auth/config.yaml.tmp" "$NOTCH_HOME/auth/config.yaml"
 # Step 4: cluster
 if ! kind get clusters | grep -qx "$CLUSTER"; then
   CFG=$(mktemp)
-  trap 'rm -f "$CFG"' EXIT
   sed "s|@NOTCH_HOME@|$NOTCH_HOME|" kind.yaml > "$CFG"
   kind create cluster --name "$CLUSTER" --config "$CFG"
+  rm -f "$CFG"
 fi
 kubectl config use-context "kind-$CLUSTER"
 
@@ -100,12 +100,34 @@ kubectl create namespace keycloak --dry-run=client -o yaml | kubectl apply -f - 
 kubectl -n keycloak create secret generic keycloak-secrets --from-env-file="$NOTCH_HOME/keycloak.env" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-# Step 7: ArgoCD bootstrap; addons from platform.yaml come through it later
-if ! helm status argocd -n argocd >/dev/null 2>&1; then
-  helm repo add argo https://argoproj.github.io/argo-helm >/dev/null 2>&1 || true
-  helm repo update argo
-  helm install argocd argo/argo-cd -n argocd --create-namespace --version "$ARGOCD_VERSION" --wait
-fi
+# SSO client secrets for ArgoCD and Grafana, from keycloak.env. ArgoCD only
+# resolves $<secret>:<key> references in secrets labelled part-of=argocd.
+# shellcheck disable=SC1091
+. "$NOTCH_HOME/keycloak.env"
+for ns in argocd monitoring; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+done
+kubectl -n argocd create secret generic argocd-oidc --from-literal=clientSecret="$ARGOCD_CLIENT_SECRET" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n argocd label secret argocd-oidc --overwrite app.kubernetes.io/part-of=argocd >/dev/null
+kubectl -n monitoring create secret generic grafana-oidc --from-literal=clientSecret="$GRAFANA_CLIENT_SECRET" \
+  --from-file=ca.crt="$NOTCH_HOME/ca/ca.crt" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+# Step 7: ArgoCD bootstrap; addons from platform.yaml come through it later.
+# Upgraded every run so values changes land; same values = no rollout.
+OIDC=$(mktemp)
+trap 'rm -f "${CFG:-}" "$OIDC"' EXIT
+cat > "$OIDC" <<EOF
+name: Keycloak
+issuer: https://keycloak.notch.localhost/realms/notch
+clientID: argocd
+clientSecret: \$argocd-oidc:clientSecret
+requestedScopes: [openid, profile, email]
+rootCA: |
+$(sed 's/^/  /' "$NOTCH_HOME/ca/ca.crt")
+EOF
+helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm -n argocd \
+  --version "$ARGOCD_VERSION" -f clusters/argocd-values.yaml --set-file 'configs.cm.oidc\.config'="$OIDC" --wait >/dev/null
 
 # Step 8: root app pointing ArgoCD at this repo
 kubectl apply -f clusters/kind.yaml
@@ -135,7 +157,7 @@ docker exec "$CLUSTER-control-plane" sh -c \
 cat <<EOF
 
 Notch is up. Watch:   kubectl -n argocd get applications -w
-ArgoCD UI:            kubectl -n argocd port-forward svc/argocd-server 8443:443  (https://localhost:8443, user admin)
+ArgoCD UI:            https://argocd.notch.localhost  (Log in via Keycloak; break-glass: user admin)
 Password:             kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 Apps, once synced:    https://<service>.notch.localhost  (trust: curl --cacert $NOTCH_HOME/ca/ca.crt)
 Logins (Keycloak):    jabril (admin), alice (team-alpha), bob (team-beta); password: NOTCH_USER_PASSWORD in $NOTCH_HOME/keycloak.env

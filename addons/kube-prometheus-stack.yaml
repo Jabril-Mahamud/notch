@@ -34,6 +34,39 @@ spec:
             - name: Tempo
               type: tempo
               url: http://tempo.tempo.svc:3200
+          # SSO through Keycloak; the groups claim picks the role. The token and
+          # userinfo calls go pod -> keycloak.notch.localhost, which CoreDNS
+          # routes to the ingress (kind-up.sh step 9).
+          grafana.ini:
+            server:
+              root_url: https://grafana.notch.localhost
+            auth.generic_oauth:
+              enabled: true
+              name: Keycloak
+              client_id: grafana
+              client_secret: $__file{/etc/secrets/grafana-oidc/clientSecret}
+              scopes: openid profile email
+              auth_url: https://keycloak.notch.localhost/realms/notch/protocol/openid-connect/auth
+              token_url: https://keycloak.notch.localhost/realms/notch/protocol/openid-connect/token
+              api_url: https://keycloak.notch.localhost/realms/notch/protocol/openid-connect/userinfo
+              tls_client_ca: /etc/secrets/grafana-oidc/ca.crt
+              allow_sign_up: true
+              role_attribute_path: contains(groups[*], 'notch-admins') && 'Admin' || 'Viewer'
+          # kind-up.sh: client secret + the notch CA (Keycloak's cert issuer)
+          extraSecretMounts:
+            - name: grafana-oidc
+              secretName: grafana-oidc
+              mountPath: /etc/secrets/grafana-oidc
+              readOnly: true
+          ingress:
+            enabled: true
+            ingressClassName: nginx
+            hosts: [grafana.notch.localhost]
+            annotations:
+              cert-manager.io/cluster-issuer: notch-ca
+            tls:
+              - hosts: [grafana.notch.localhost]
+                secretName: grafana-tls
         prometheusOperator:
           resources:
             requests: { cpu: 50m, memory: 64Mi }
