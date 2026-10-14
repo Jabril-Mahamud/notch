@@ -40,13 +40,17 @@ check "services: dev apps keep their names, others get -<env>" \
 ADD=$(cat addons/environments.yaml 2>/dev/null | awk 'FNR == 1 { print "---" } 1' | yq -s . 2>/dev/null || echo '[]')
 check "env addons only target non-dev clusters" \
   '[.[] | .spec.generators[0].matrix.generators[0].clusters.selector.matchExpressions[0] | .operator == "NotIn" and .values == ["dev"]] | all' "$ADD"
+# The cluster generator already sets name/server/values/metadata; a list key
+# with the same name is shadowed in the matrix (every app became staging-staging).
+check "env list elements don't reuse cluster generator keys" \
+  '[.[] | .spec.generators[0].matrix.generators[1].list.elements[] | keys[]] | all(. != "name" and . != "server" and . != "values" and . != "metadata" and . != "nameNormalized")' "$ADD"
 check "env addons: lean set, no observability or Keycloak" \
-  '[.[] | .spec.generators[0].matrix.generators[1].list.elements[].name] | sort == ["cert-manager","cert-manager-issuer","cloudnative-pg","crossplane","crossplane-provider-sql","external-secrets","external-secrets-store","infra","ingress-nginx","notch-postgres","reloader"]' "$ADD"
+  '[.[] | .spec.generators[0].matrix.generators[1].list.elements[].addon] | sort == ["cert-manager","cert-manager-issuer","cloudnative-pg","crossplane","crossplane-provider-sql","external-secrets","external-secrets-store","infra","ingress-nginx","notch-postgres","reloader"]' "$ADD"
 # The env addon list repeats chart versions: catch drift from addons/*.yaml.
 for f in addons/ingress-nginx.yaml addons/cert-manager.yaml addons/cloudnative-pg.yaml addons/crossplane.yaml addons/external-secrets.yaml addons/reloader.yaml; do
   name=$(yq -r '.metadata.name' "$f"); ver=$(yq -r '.spec.source.targetRevision' "$f")
   check "env $name pinned to the same version as dev ($ver)" \
-    "[.[] | .spec.generators[0].matrix.generators[1].list.elements[] | select(.name == \"$name\") | .version] == [\"$ver\"]" "$ADD"
+    "[.[] | .spec.generators[0].matrix.generators[1].list.elements[] | select(.addon == \"$name\") | .version] == [\"$ver\"]" "$ADD"
 done
 
 grep_check "kind-up takes an env (dev default)" '^ENV=\$\{1:-dev\}' scripts/kind-up.sh
