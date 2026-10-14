@@ -15,13 +15,33 @@ const (
 	Context = "kind-" + Cluster
 )
 
-// Up runs kind-up.sh, which is idempotent and prints the ArgoCD/app URLs itself.
-func Up(root string) error {
-	return RunIn(root, filepath.Join(root, "scripts", "kind-up.sh"))
+// ClusterFor maps an environment to its Kind cluster (scripts/kind-up.sh).
+func ClusterFor(env string) (string, error) {
+	switch env {
+	case "dev":
+		return Cluster, nil
+	case "staging":
+		return Cluster + "-staging", nil
+	}
+	return "", fmt.Errorf("unknown environment %q (dev or staging)", env)
 }
 
-func Down() error {
-	return Run("kind", "delete", "cluster", "--name", Cluster)
+// Up runs kind-up.sh for env, which is idempotent and prints its URLs itself.
+func Up(root, env string) error {
+	if _, err := ClusterFor(env); err != nil {
+		return err
+	}
+	return RunIn(root, filepath.Join(root, "scripts", "kind-up.sh"), env)
+}
+
+// Down deletes env's cluster. Dropping staging leaves its ArgoCD cluster
+// secret in dev; kind-up rewrites it on the next notch up staging.
+func Down(env string) error {
+	name, err := ClusterFor(env)
+	if err != nil {
+		return err
+	}
+	return Run("kind", "delete", "cluster", "--name", name)
 }
 
 // Pause stops the node container: state survives, CPU and RAM come back.
@@ -41,7 +61,7 @@ func Resume(root string) error {
 	if err := Kubectl("wait", "--for=condition=Ready", "node", "--all", "--timeout=120s"); err != nil {
 		return err
 	}
-	return Up(root)
+	return Up(root, "dev")
 }
 
 // waitAPI polls the API server: kubectl wait fails outright (connection

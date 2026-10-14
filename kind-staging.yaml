@@ -1,0 +1,24 @@
+# Staging cluster, created by `scripts/kind-up.sh staging`. No ArgoCD of its own:
+# the dev cluster's ArgoCD deploys here (addons/environments.yaml, services.yaml).
+# Apps: https://<service>.staging.notch.localhost:8443 (dev holds 443).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+# Same registry as dev (notch-registry on the kind network), so staging pulls the
+# exact image dev ran: promotion moves a tag, never rebuilds.
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+nodes:
+  - role: control-plane
+    labels:
+      ingress-ready: "true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8081
+        listenAddress: 127.0.0.1
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        listenAddress: 127.0.0.1
+        protocol: TCP

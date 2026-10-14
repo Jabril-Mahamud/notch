@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Bring up Notch on a local Kind cluster. Safe to re-run.
-# Tear down: kind delete cluster --name notch
+# Bring up a Notch environment on Kind. Safe to re-run.
+#   kind-up.sh          dev: the management cluster (ArgoCD, Keycloak, observability)
+#   kind-up.sh staging  a lean cluster, deployed by dev's ArgoCD from main
+# Tear down: notch down [env]
 cd "$(dirname "$0")/.."
 
-CLUSTER=notch
+ENV=${1:-dev}
+case "$ENV" in
+  dev) CLUSTER=notch KIND_CONFIG=kind.yaml ;;
+  staging) CLUSTER=notch-staging KIND_CONFIG=kind-staging.yaml ;;
+  *) echo "unknown env $ENV (dev or staging)" >&2; exit 1 ;;
+esac
 ARGOCD_VERSION=10.9.2
 REGISTRY=notch-registry
 # Outside the repo so it survives notch down and fresh clones: auth config now, CA next.
@@ -25,11 +32,12 @@ if [ ! -f "$NOTCH_HOME/ca/ca.crt" ]; then
     -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign 2>/dev/null
 fi
 
-# Step 3: apiserver auth config: kubectl logs in through Keycloak. Rewritten on
+# Step 3 (dev): apiserver auth config: kubectl logs in through Keycloak. Rewritten on
 # every run and reloaded live by the apiserver (structured auth config), so no
 # cluster recreate. Usernames are emails, prefixed oidc: like groups, so a
 # Keycloak group can never pose as a system: one.
 [ -f "$NOTCH_HOME/ca/ca.crt" ] || { echo "no CA at $NOTCH_HOME/ca/ca.crt" >&2; exit 1; }
+if [ "$ENV" = dev ]; then
 mkdir -p "$NOTCH_HOME/auth"
 # Write then rename: the apiserver watches the file, and a truncate-then-write
 # lets it read an empty config ("empty config data").
@@ -47,11 +55,12 @@ $(sed 's/^/        /' "$NOTCH_HOME/ca/ca.crt")
       groups: { claim: groups, prefix: "oidc:" }
 EOF
 mv "$NOTCH_HOME/auth/config.yaml.tmp" "$NOTCH_HOME/auth/config.yaml"
+fi
 
 # Step 4: cluster
 if ! kind get clusters | grep -qx "$CLUSTER"; then
   CFG=$(mktemp)
-  sed "s|@NOTCH_HOME@|$NOTCH_HOME|" kind.yaml > "$CFG"
+  sed "s|@NOTCH_HOME@|$NOTCH_HOME|" "$KIND_CONFIG" > "$CFG"
   kind create cluster --name "$CLUSTER" --config "$CFG"
   rm -f "$CFG"
 fi
@@ -84,6 +93,41 @@ kubectl -n platform-db get secret notch-pg-superuser >/dev/null 2>&1 ||
 kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n cert-manager create secret tls notch-ca \
   --cert="$NOTCH_HOME/ca/ca.crt" --key="$NOTCH_HOME/ca/ca.key" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+# Staging: register with dev's ArgoCD, copy secrets, done. Everything else
+# (ArgoCD, Keycloak, observability, OIDC routing) lives on dev only.
+if [ "$ENV" = staging ]; then
+  # ExternalSecret sources: notch add writes them to dev; rerun this after one.
+  # ponytail: staging shares dev's secret values. Per-env secrets (notch add
+  # --env) when an env needs its own.
+  kubectl --context kind-notch -n notch-secrets get secret -o json |
+    python3 -c 'import sys,json; d=json.load(sys.stdin); [m.pop(k,None) for i in d["items"] for m in [i["metadata"]] for k in ("uid","resourceVersion","creationTimestamp","managedFields","annotations","ownerReferences")]; print(json.dumps(d))' |
+    kubectl -n notch-secrets apply -f - >/dev/null
+  # ArgoCD runs in dev's node; it reaches staging's apiserver over the kind
+  # network by container name, not the host's 127.0.0.1 port (--internal).
+  KCFG=$(kind get kubeconfig --internal --name "$CLUSTER")
+  field() { yq -r "$1" <<<"$KCFG"; }
+  kubectl --context kind-notch -n argocd create secret generic cluster-staging \
+    --from-literal=name=staging --from-literal=server="$(field '.clusters[0].cluster.server')" \
+    --from-literal=config="$(printf '{"tlsClientConfig":{"caData":"%s","certData":"%s","keyData":"%s"}}' \
+      "$(field '.clusters[0].cluster["certificate-authority-data"]')" \
+      "$(field '.users[0].user["client-certificate-data"]')" "$(field '.users[0].user["client-key-data"]')")" \
+    --dry-run=client -o yaml | kubectl --context kind-notch apply -f - >/dev/null
+  # Branch and values dir this env deploys (see addons/services.yaml). main =
+  # promotion by merge; STAGING_REVISION=dev previews dev on staging.
+  kubectl --context kind-notch -n argocd label secret cluster-staging --overwrite \
+    argocd.argoproj.io/secret-type=cluster notch.dev/env=staging >/dev/null
+  kubectl --context kind-notch -n argocd annotate secret cluster-staging --overwrite \
+    notch.dev/revision="${STAGING_REVISION:-main}" notch.dev/values=staging >/dev/null
+  kubectl config use-context kind-notch >/dev/null
+  cat <<EOF
+
+Staging is up, deployed by dev's ArgoCD from ${STAGING_REVISION:-main}:
+  kubectl -n argocd get applications | grep staging
+  https://<service>.staging.notch.localhost:8443  (curl --cacert $NOTCH_HOME/ca/ca.crt)
+EOF
+  exit 0
+fi
 
 # Keycloak credentials: generated once, kept with the CA so a recreated cluster
 # keeps the same logins and client secrets. The realm reads them as ${VAR}s.

@@ -1,0 +1,47 @@
+# Staging (`notch up staging`): dev's ArgoCD deploys the lean platform and the
+# services into the second cluster, from the branch staging tracks.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ingress-nginx-staging
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-staging
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hello-staging
+  namespace: argocd
+status:
+  sync:
+    status: Synced
+  health:
+    status: Healthy
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      CA="${NOTCH_HOME:-$HOME/.config/notch}/ca/ca.crt"
+      S="--context kind-notch-staging"
+      # Its own Postgres via the same NotchPostgres API, its own TLS from the shared CA.
+      kubectl $S -n hello wait --for=condition=Ready notchpostgres/hello --timeout=10s
+      curl -sf --cacert "$CA" https://hello.staging.notch.localhost:8443/ >/dev/null
+      # Pulled from the shared registry: same image refs, no rebuild for staging.
+      kubectl $S -n hello get deploy hello -o jsonpath='{.spec.template.spec.containers[0].image}' | grep -q '^localhost:5001/hello:'
