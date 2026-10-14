@@ -44,4 +44,10 @@ check "kind-up.sh creates notch-secrets namespace" \
 bash -n scripts/kind-up.sh && echo "ok   kind-up.sh syntax" || { echo "FAIL kind-up.sh syntax"; FAILED=1; }
 grep -q "notch-secrets" scripts/kind-up.sh && echo "ok   kind-up has notch-secrets" || { echo "FAIL kind-up has notch-secrets"; FAILED=1; }
 
+# Reloader: <service>-db is recreated, not updated, when a NotchPostgres claim
+# replaces it, and Reloader ignores creates by default: pods kept a dead password.
+OUT=$(cat addons/reloader.yaml)
+check "Reloader restarts pods when a watched secret is recreated" \
+  '.[0].spec.source.helm.valuesObject.reloader.reloadOnCreate == true'
+
 exit $FAILED
