@@ -23,6 +23,11 @@ roleRef:
   kind: ClusterRole
   name: edit
 subjects:
+  # Automation (CI, scripts) keeps a ServiceAccount.
   - kind: ServiceAccount
     name: {{ $name }}-deployer
     namespace: {{ $name }}
+  # People: the tenant's Keycloak group, prefixed by the apiserver's claimMappings.
+  - kind: Group
+    name: oidc:{{ $name }}
+    apiGroup: rbac.authorization.k8s.io

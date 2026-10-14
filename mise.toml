@@ -7,3 +7,5 @@ kuttl = "0.27.0"
 # tests/notch-postgres.sh renders the NotchPostgres composition with it (2.x CLI
 # renders the 1.x-style composition fine; the cluster runs Crossplane 1.20).
 "aqua:crossplane/cli" = "2.5.0"
+# Tenant kubeconfigs log in through Keycloak with it (notch tenant create).
+"aqua:int128/kubelogin" = "1.36.4"
