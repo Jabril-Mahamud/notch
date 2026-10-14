@@ -3,6 +3,8 @@
 # = cluster-admin / ArgoCD admin / Grafana Admin, team-* = their tenant namespace.
 # ${VAR} placeholders are filled from keycloak-secrets (kind-up.sh), so no
 # credential is in git.
+# User ids are fixed: the realm is re-imported on every start, and a new id
+# means a new `sub`, which breaks Grafana's link to existing users.
 # ponytail: directAccessGrants (password grant) on every client, for kuttl and
 # scripted logins. Off for any real environment.
 apiVersion: v1
@@ -30,6 +32,7 @@ data:
       ],
       "users": [
         {
+          "id": "8f4c87bb-f58d-5ba9-a8dd-8b2195cd112d",
           "username": "jabril",
           "enabled": true,
           "email": "jabril@notch.localhost",
@@ -48,6 +51,7 @@ data:
           ]
         },
         {
+          "id": "49301b67-b9ea-5b10-b264-1e645ba9fed7",
           "username": "alice",
           "enabled": true,
           "email": "alice@notch.localhost",
@@ -66,6 +70,7 @@ data:
           ]
         },
         {
+          "id": "41426c21-a072-592b-be02-9cfa2e744f3a",
           "username": "bob",
           "enabled": true,
           "email": "bob@notch.localhost",

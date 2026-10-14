@@ -19,6 +19,10 @@ check "groups: notch-admins and one per tenant" '[.groups[].name] | sort == ["no
 check "jabril is a notch-admin" '.users[] | select(.username == "jabril") | .groups == ["/notch-admins"]' "$REALM"
 check "alice in team-alpha, bob in team-beta" \
   '([.users[] | select(.username == "alice") | .groups] == [["/team-alpha"]]) and ([.users[] | select(.username == "bob") | .groups] == [["/team-beta"]])' "$REALM"
+# The realm is re-imported on every start; without fixed ids each user gets a new
+# `sub`, and Grafana's link to the user breaks ("unable to create user").
+check "users have fixed ids, so sub survives a Keycloak restart" \
+  '[.users[].id | select(test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))] | length == 3' "$REALM"
 check "users have verified emails (username claim)" 'all(.users[]; .emailVerified == true and (.email | endswith("@notch.localhost")))' "$REALM"
 check "clients: kubernetes, argocd, grafana" '[.clients[].clientId] | sort == ["argocd","grafana","kubernetes"]' "$REALM"
 check "every client puts groups in its tokens (short names, not paths)" \
