@@ -1,3 +1,5 @@
+# List keys avoid name/values/server: the cluster generator sets those, and
+# in a matrix its params shadow the list's.
 # Platform for every non-dev environment (staging today), deployed by this
 # ArgoCD into the env's cluster. Lean on purpose: no observability stack and no
 # Keycloak, to keep a second Kind cluster within RAM. Chart versions repeat
@@ -25,13 +27,13 @@ spec:
                   - { key: notch.dev/env, operator: NotIn, values: [dev] }
           - list:
               elements:
-                - name: ingress-nginx
+                - addon: ingress-nginx
                   repoURL: https://kubernetes.github.io/ingress-nginx
                   chart: ingress-nginx
                   version: "4.15.1"
                   namespace: ingress-nginx
                   # Same as dev: hostPort on the ingress-ready node (kind-staging.yaml maps it).
-                  values: |
+                  helmValues: |
                     controller:
                       hostPort: { enabled: true }
                       service: { type: NodePort }
@@ -41,41 +43,41 @@ spec:
                       ingressClassResource: { default: true }
                       publishService: { enabled: false }
                       extraArgs: { publish-status-address: localhost }
-                - name: cert-manager
+                - addon: cert-manager
                   repoURL: https://charts.jetstack.io
                   chart: cert-manager
                   version: "v1.21.2"
                   namespace: cert-manager
-                  values: |
+                  helmValues: |
                     crds: { enabled: true }
-                - name: cloudnative-pg
+                - addon: cloudnative-pg
                   repoURL: https://cloudnative-pg.github.io/charts
                   chart: cloudnative-pg
                   version: "0.29.1"
                   namespace: cnpg-system
-                  values: ""
-                - name: crossplane
+                  helmValues: ""
+                - addon: crossplane
                   repoURL: https://charts.crossplane.io/stable
                   chart: crossplane
                   version: "1.20.13"
                   namespace: crossplane-system
-                  values: ""
-                - name: external-secrets
+                  helmValues: ""
+                - addon: external-secrets
                   repoURL: https://charts.external-secrets.io
                   chart: external-secrets
                   version: "2.12.0"
                   namespace: external-secrets
-                  values: ""
-                - name: reloader
+                  helmValues: ""
+                - addon: reloader
                   repoURL: https://stakater.github.io/stakater-charts
                   chart: reloader
                   version: "2.2.18"
                   namespace: reloader
-                  values: |
+                  helmValues: |
                     reloader: { reloadOnCreate: true }
   template:
     metadata:
-      name: '{{ .name }}-{{ index .metadata.labels "notch.dev/env" }}'
+      name: '{{ .addon }}-{{ index .metadata.labels "notch.dev/env" }}'
     spec:
       project: default
       source:
@@ -83,7 +85,7 @@ spec:
         chart: "{{ .chart }}"
         targetRevision: "{{ .version }}"
         helm:
-          values: "{{ .values }}"
+          values: "{{ .helmValues }}"
       destination:
         server: "{{ .server }}"
         namespace: "{{ .namespace }}"
@@ -118,14 +120,14 @@ spec:
                   - { key: notch.dev/env, operator: NotIn, values: [dev] }
           - list:
               elements:
-                - { name: cert-manager-issuer, path: addons, include: cert-manager-issuer.yaml }
-                - { name: crossplane-provider-sql, path: addons, include: crossplane-provider-sql.yaml }
-                - { name: external-secrets-store, path: addons, include: external-secrets-store.yaml }
-                - { name: notch-postgres, path: addons/notch-postgres, include: "*.yaml" }
-                - { name: infra, path: addons/infra, include: "*.yaml" }
+                - { addon: cert-manager-issuer, path: addons, include: cert-manager-issuer.yaml }
+                - { addon: crossplane-provider-sql, path: addons, include: crossplane-provider-sql.yaml }
+                - { addon: external-secrets-store, path: addons, include: external-secrets-store.yaml }
+                - { addon: notch-postgres, path: addons/notch-postgres, include: "*.yaml" }
+                - { addon: infra, path: addons/infra, include: "*.yaml" }
   template:
     metadata:
-      name: '{{ .name }}-{{ index .metadata.labels "notch.dev/env" }}'
+      name: '{{ .addon }}-{{ index .metadata.labels "notch.dev/env" }}'
     spec:
       project: default
       source:
