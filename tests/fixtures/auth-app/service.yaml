@@ -1,0 +1,12 @@
+# Opts into Keycloak OIDC; notch add --auth lists OIDC_CLIENT_SECRET for it.
+service:
+  name: auth-app
+  ports:
+    - name: http
+      port: 8000
+  deployment:
+    containers:
+      app: {}
+  auth: true
+  secrets:
+    - OIDC_CLIENT_SECRET

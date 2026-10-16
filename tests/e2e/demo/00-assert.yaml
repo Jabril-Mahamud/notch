@@ -1,6 +1,6 @@
 # Phase 3: github.com/Jabril-Mahamud/notch-demo (scaffolded by `notch new`),
-# end to end: Next.js at /, FastAPI at /api, a todo written to its Postgres,
-# and live weather fetched from Open-Meteo (needs internet egress).
+# end to end: DB claim, secret, TLS, Next.js at /, FastAPI at /api, a todo
+# written to its Postgres, and live weather from Open-Meteo (needs internet egress).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -29,6 +29,14 @@ commands:
       IMAGES=$(kubectl -n demo get deploy demo -o jsonpath='{.spec.template.spec.containers[*].image}')
       [ -n "$IMAGES" ]
       for i in $IMAGES; do case $i in localhost:5001/*) ;; *) echo "not from the registry: $i"; exit 1 ;; esac; done
+  # Ready = the composed Role and Database are Ready and <service>-db is written.
+  - command: kubectl -n demo wait --for=condition=Ready notchpostgres/demo --timeout=10s
+  - command: kubectl -n demo wait --for=condition=Ready externalsecret/demo-secrets --timeout=10s
+  - command: kubectl -n demo wait --for=condition=Ready certificate/demo-tls --timeout=10s
+  # Plain http redirects to TLS.
+  - script: |
+      set -e
+      [ "$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://demo.notch.localhost:8080/)" = "308 https://demo.notch.localhost/" ]
   - script: |
       set -e
       H=https://demo.notch.localhost

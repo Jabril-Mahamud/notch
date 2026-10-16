@@ -50,4 +50,21 @@ else
   echo "FAIL kind-up generates keycloak.env once and loads keycloak-secrets"; FAILED=1
 fi
 
+# App clients (auth: true services) are created live by scripts/app-clients.sh,
+# not the realm: services come and go, the realm is static.
+grep_check() { # description pattern file
+  if grep -qE -- "$2" "$3" 2>/dev/null; then echo "ok   $1"; else echo "FAIL $1"; FAILED=1; fi
+}
+APP=scripts/app-clients.sh
+grep_check "kind-up re-creates app clients every run (realm import wipes them)" '^scripts/app-clients\.sh$' scripts/kind-up.sh
+grep_check "app clients: no password grant (platform-only)" 'directAccessGrantsEnabled: false' "$APP"
+grep_check "app clients: no client credentials flow" 'serviceAccountsEnabled: false' "$APP"
+grep_check "app clients: confidential" 'publicClient: false' "$APP"
+grep_check "app clients get the groups claim mapper" 'oidc-group-membership-mapper' "$APP"
+# keycloak-secrets has Reloader: app secrets in keycloak.env would restart Keycloak and wipe the clients
+grep_check "app client secrets kept outside keycloak.env" 'NOTCH_HOME/app-clients\.env' "$APP"
+# A server-side apply takes over notch add's client-side keys and drops them
+grep_check "OIDC_CLIENT_SECRET merge-patched, so app keys from notch add survive" 'patch secret "\$id-secrets" --type merge' "$APP"
+if bash -n "$APP" 2>/dev/null; then echo "ok   app-clients.sh parses"; else echo "FAIL app-clients.sh parses"; FAILED=1; fi
+
 exit $FAILED

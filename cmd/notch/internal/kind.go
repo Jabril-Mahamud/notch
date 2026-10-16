@@ -34,6 +34,12 @@ func Up(root, env string) error {
 	return RunIn(root, filepath.Join(root, "scripts", "kind-up.sh"), env)
 }
 
+// AppClients registers the Keycloak client for an auth service (dir relative
+// to root) and writes its OIDC_CLIENT_SECRET to notch-secrets.
+func AppClients(root, dir string) error {
+	return RunIn(root, filepath.Join(root, "scripts", "app-clients.sh"), dir)
+}
+
 // Down deletes env's cluster. Dropping staging leaves its ArgoCD cluster
 // secret in dev; kind-up rewrites it on the next notch up staging.
 func Down(env string) error {

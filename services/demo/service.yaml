@@ -28,3 +28,6 @@ service:
           - name: PORT
             value: "3000"
   postgres: true
+  auth: true
+  secrets:
+    - OIDC_CLIENT_SECRET

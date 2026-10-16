@@ -130,9 +130,9 @@ commands:
   # resolve through DNS first, as app runtimes do, and hand curl the address.
   - script: |
       set -e
-      kubectl -n hello delete pod dns-probe --ignore-not-found >/dev/null
-      kubectl -n hello get secret hello-tls -o jsonpath='{.data.ca\.crt}' | base64 -d |
-        kubectl -n hello run dns-probe --image=curlimages/curl:8.17.0 --restart=Never --rm -i --quiet --command -- sh -c '
+      kubectl -n demo delete pod dns-probe --ignore-not-found >/dev/null
+      kubectl -n demo get secret demo-tls -o jsonpath='{.data.ca\.crt}' | base64 -d |
+        kubectl -n demo run dns-probe --image=curlimages/curl:8.17.0 --restart=Never --rm -i --quiet --command -- sh -c '
           cat > /tmp/ca.crt
-          IP=$(nslookup hello.notch.localhost | sed -n "s/^Address: //p" | tail -1)
-          curl -sf --cacert /tmp/ca.crt --resolve "hello.notch.localhost:443:$IP" -o /dev/null https://hello.notch.localhost/'
+          IP=$(nslookup demo.notch.localhost | sed -n "s/^Address: //p" | tail -1)
+          curl -sf --cacert /tmp/ca.crt --resolve "demo.notch.localhost:443:$IP" -o /dev/null https://demo.notch.localhost/'

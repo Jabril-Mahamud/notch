@@ -24,7 +24,7 @@ notch down [staging]        # delete an environment's cluster
 Apps are served at `https://<name>.notch.localhost`, with certs from cert-manager signed by a local CA that `notch up` creates once in `~/.config/notch/ca` (plain `http://...:8080` redirects there). Trust it once:
 
 ```bash
-curl --cacert ~/.config/notch/ca/ca.crt https://hello.notch.localhost/
+curl --cacert ~/.config/notch/ca/ca.crt https://demo.notch.localhost/
 sudo trust anchor --store ~/.config/notch/ca/ca.crt   # system + browsers (Arch/Fedora; Debian: update-ca-certificates)
 ```
 
@@ -45,13 +45,15 @@ sudo trust anchor --store ~/.config/notch/ca/ca.crt   # system + browsers (Arch/
 
 ## Any repo
 
-`notch add <path-or-git-url> [--name N] [--postgres] [--secret KEY ...] [--build-arg [component:]KEY=VALUE ...]`
+`notch add <path-or-git-url> [--name N] [--postgres] [--auth] [--secret KEY ...] [--build-arg [component:]KEY=VALUE ...]`
 
 - **Dockerfile at the root**: built as is.
 - **No Dockerfile**: [Railpack](https://railpack.com/) detects the stack and start command (Node, Python, Go, ...). The container gets `PORT`.
 - **Monorepo**: `frontend/` + `backend/` (or `apps/frontend` + `apps/backend`), each with a Dockerfile, become one service: frontend at `/`, backend at `/api`, same host. Frontends that bake the API URL in at build time get it with `--build-arg frontend:NEXT_PUBLIC_API_URL=/api`.
 
 Secrets are prompted and synced through ExternalSecrets. Services with `postgres: true` get `DATABASE_URL` plus the `PG*` vars; a container's own `env` in `service.yaml` overrides them by name and can use `$(PGUSER)` etc., e.g. for a `postgresql+asyncpg://` scheme.
+
+`--auth` (`auth: true`, the default for `notch new`) registers a Keycloak client for the service and injects `OIDC_ISSUER`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`. The app validates tokens itself; Notch only hands it the config. Clients are re-created on every `notch up`, since Keycloak re-imports its realm on start.
 
 Rerunning `notch add` on an existing service rebuilds it; if the source moved, the new tag is committed to `dev` and ArgoCD rolls the pods. The registry outlives the cluster, so after `notch down` / `up` a rerun is only needed to re-enter `--secret` values.
 
@@ -78,6 +80,16 @@ One identity for everything: Keycloak at `https://keycloak.notch.localhost` (rea
 | `<tenant>` (e.g. `team-alpha`) | `edit` in that namespace | read-only | Viewer |
 
 Add someone to a team by adding them to the Keycloak group; nothing in the cluster changes.
+
+There are three different passwords, one per login:
+
+| Login | Where | User | Password |
+|:--|:--|:--|:--|
+| Keycloak users (use this) | ArgoCD and Grafana: the **Keycloak** button, not the username/password form | `jabril`, `alice`, `bob` | `grep NOTCH_USER_PASSWORD ~/.config/notch/keycloak.env` |
+| ArgoCD break-glass | ArgoCD's username/password form (only accepts `admin`) | `admin` | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` |
+| Keycloak console | `https://keycloak.notch.localhost/admin` | `admin` | `grep KEYCLOAK_ADMIN_PASSWORD ~/.config/notch/keycloak.env` |
+
+ArgoCD is up minutes before the ingress and Keycloak are. To watch the first sync, `kubectl -n argocd port-forward svc/argocd-server 8090:80` and open `http://localhost:8090` as break-glass `admin` (the Keycloak button redirects to the ingress host, so it doesn't work there).
 
 ```bash
 notch tenant create team-alpha                 # pushes tenants/team-alpha/, writes team-alpha.kubeconfig

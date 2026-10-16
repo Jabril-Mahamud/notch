@@ -2,9 +2,9 @@ service:
   endpoints:
     internal:
       hosts:
-        - hello.notch.localhost:8080
+        - auth-app.notch.localhost:8080
   deployment:
     containers:
       app:
         image:
-          ref: localhost:5001/hello:17834b2
+          ref: notch-auth-app:local

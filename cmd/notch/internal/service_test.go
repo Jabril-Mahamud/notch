@@ -120,6 +120,23 @@ func TestWriteService(t *testing.T) {
 	}
 }
 
+// auth lists OIDC_CLIENT_SECRET so the ExternalSecret syncs it; it's never prompted.
+func TestWriteServiceAuth(t *testing.T) {
+	dir, err := WriteService(t.TempDir(), Service{Name: "hello", Port: 8000, Tag: "abc1234", Auth: true, Secrets: []string{"API_KEY"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, _ := os.ReadFile(filepath.Join(dir, "service.yaml"))
+	if !strings.Contains(string(svc), "auth: true\n  secrets:\n    - API_KEY\n    - OIDC_CLIENT_SECRET\n") {
+		t.Errorf("service.yaml missing auth and OIDC_CLIENT_SECRET:\n%s", svc)
+	}
+	dir, _ = WriteService(t.TempDir(), Service{Name: "hello", Port: 8000, Tag: "abc1234"})
+	svc, _ = os.ReadFile(filepath.Join(dir, "service.yaml"))
+	if strings.Contains(string(svc), "auth") || strings.Contains(string(svc), "OIDC") {
+		t.Errorf("no auth, but service.yaml has it:\n%s", svc)
+	}
+}
+
 func TestWriteServiceRefusesExisting(t *testing.T) {
 	root := t.TempDir()
 	s := Service{Name: "hello", Port: 8000}
@@ -138,7 +155,7 @@ func TestWriteServiceRendersWithChart(t *testing.T) {
 	}
 	mono := Service{Name: "mono", Tag: "abc1234", Postgres: true, Components: []Component{
 		{Name: "backend", Port: 8001, Path: "/api"}, {Name: "frontend", Port: 3001, Path: "/"}}}
-	for _, s := range []Service{{Name: "plain", Port: 3000, Tag: "abc1234"}, {Name: "full", Port: 8000, Tag: "abc1234", Postgres: true, Secrets: []string{"A", "B"}}, mono} {
+	for _, s := range []Service{{Name: "plain", Port: 3000, Tag: "abc1234"}, {Name: "full", Port: 8000, Tag: "abc1234", Postgres: true, Secrets: []string{"A", "B"}}, {Name: "authed", Port: 8000, Tag: "abc1234", Auth: true}, mono} {
 		dir, err := WriteService(t.TempDir(), s)
 		if err != nil {
 			t.Fatal(err)

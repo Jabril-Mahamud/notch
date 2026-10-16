@@ -15,13 +15,13 @@ commands:
           -d client_secret="$SECRET" -d scope=openid -d username="$1" -d password="$PW" |
           python3 -c 'import sys,json; print(json.load(sys.stdin)["id_token"])'
       }
-      cani() { # user -> can they sync the hello app?
+      cani() { # user -> can they sync the demo app?
         curl -sf --cacert "$CA" -H "Authorization: Bearer $(token "$1")" \
-          https://argocd.notch.localhost/api/v1/account/can-i/applications/sync/default%2Fhello
+          https://argocd.notch.localhost/api/v1/account/can-i/applications/sync/default%2Fdemo
       }
       cani jabril | grep -q '"value":"yes"'
       cani alice | grep -q '"value":"no"'
-      curl -sf --cacert "$CA" -H "Authorization: Bearer $(token alice)" https://argocd.notch.localhost/api/v1/applications | grep -q '"name":"hello"'
+      curl -sf --cacert "$CA" -H "Authorization: Bearer $(token alice)" https://argocd.notch.localhost/api/v1/applications | grep -q '"name":"demo"'
   # Grafana: a real browser-style login. Grafana's server-side token exchange
   # runs in its pod, so this also proves pods reach and trust Keycloak.
   - script: |
