@@ -89,7 +89,11 @@ mise.toml                     ← railpack + kuttl versions
 - Vault plan: `~/Documents/openclaw/Projects/k8/Notch/Notch.md`
 - Yalla reference (READ ONLY): `/mnt/hdd/projects/work/yalla/`
 - v1 repos (archived on GitHub): `Jabril-Mahamud/notch`, `Jabril-Mahamud/notch-gitops`
-- Test apps; images survive `notch down` in the registry, so after a fresh `notch up` rerun these only to restore secrets:
-  - hello, a public starter: `notch add https://github.com/heroku/node-js-getting-started --name hello --postgres --secret SESSION_SECRET`
-  - demo, scaffolded by `notch new` (todos + Open-Meteo weather): `notch add https://github.com/Jabril-Mahamud/notch-demo --name demo --postgres`
+- Logins: three passwords, don't mix them up (all in README "Sign-in"):
+  - Keycloak users `jabril` (admin), `alice`, `bob`: `NOTCH_USER_PASSWORD` in `~/.config/notch/keycloak.env`. In ArgoCD/Grafana they use the Keycloak button; ArgoCD's username/password form rejects them ("Invalid username or password")
+  - ArgoCD break-glass `admin`: `argocd-initial-admin-secret` in the cluster, regenerated per cluster. The only login over the port-forward (`svc/argocd-server 8090:80`, plain http)
+  - Keycloak console `admin`: `KEYCLOAK_ADMIN_PASSWORD` in `keycloak.env`. Not an ArgoCD password
+  - `keycloak.env` is written only when the file is missing: rotating anything means deleting the whole file (all logins and client secrets change), then `notch down` + `notch up`
+- Test app: `demo` (github.com/Jabril-Mahamud/notch-demo, scaffolded by `notch new`) is the only service in `services/`, and the e2e suite asserts against it: DB claim, ExternalSecret (`OIDC_CLIENT_SECRET`), TLS, auth, todos, weather. There is no `hello` service any more; don't add test services back for coverage, extend `tests/e2e/demo`
+  - Nothing to rerun after `notch down` / `up`: its image stays in the registry and kind-up's `app-clients.sh` recreates its secret. Rebuild only when the app changes: `notch add https://github.com/Jabril-Mahamud/notch-demo --name demo --postgres --auth`
 - Goal: use the CLI like any customer: `notch new`, or `notch add` on any GitHub repo or starter. Dockerfile optional (Railpack builds the rest)

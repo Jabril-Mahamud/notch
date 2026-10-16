@@ -175,6 +175,17 @@ helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-hel
 
 # Step 8: root app pointing ArgoCD at this repo
 kubectl apply -f clusters/kind.yaml
+# The ingress URL needs ingress-nginx, cert-manager and Keycloak, which take
+# minutes to sync; port-forward works now. 80 because server.insecure (TLS ends
+# at the ingress), 8090 because kind.yaml holds host 8080. Admin, since SSO
+# redirects to argocd.notch.localhost.
+cat <<EOF
+
+ArgoCD is up; addons are syncing (ingress, Keycloak take a few minutes). Watch now:
+  kubectl -n argocd port-forward svc/argocd-server 8090:80   then http://localhost:8090
+  user admin, password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+
+EOF
 
 # Step 9: *.notch.localhost resolves to ::1 off the host, so in-cluster callers
 # never reach the ingress. The OIDC issuer URL must be the same string for the
@@ -205,8 +216,14 @@ scripts/app-clients.sh
 cat <<EOF
 
 Notch is up. Watch:   kubectl -n argocd get applications -w
-ArgoCD UI:            https://argocd.notch.localhost  (Log in via Keycloak; break-glass: user admin)
-Password:             kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 Apps, once synced:    https://<service>.notch.localhost  (trust: curl --cacert $NOTCH_HOME/ca/ca.crt)
-Logins (Keycloak):    jabril (admin), alice (team-alpha), bob (team-beta); password: NOTCH_USER_PASSWORD in $NOTCH_HOME/keycloak.env
+
+ArgoCD / Grafana:     https://argocd.notch.localhost, https://grafana.notch.localhost
+  use the Keycloak button (ArgoCD's username/password form is its local admin only)
+  users:    jabril (admin), alice (team-alpha), bob (team-beta)
+  password: grep NOTCH_USER_PASSWORD $NOTCH_HOME/keycloak.env
+ArgoCD break-glass:   username/password form, user admin
+  password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+Keycloak console:     https://keycloak.notch.localhost/admin, user admin
+  password: grep KEYCLOAK_ADMIN_PASSWORD $NOTCH_HOME/keycloak.env
 EOF

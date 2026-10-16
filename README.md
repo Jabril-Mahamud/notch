@@ -24,7 +24,7 @@ notch down [staging]        # delete an environment's cluster
 Apps are served at `https://<name>.notch.localhost`, with certs from cert-manager signed by a local CA that `notch up` creates once in `~/.config/notch/ca` (plain `http://...:8080` redirects there). Trust it once:
 
 ```bash
-curl --cacert ~/.config/notch/ca/ca.crt https://hello.notch.localhost/
+curl --cacert ~/.config/notch/ca/ca.crt https://demo.notch.localhost/
 sudo trust anchor --store ~/.config/notch/ca/ca.crt   # system + browsers (Arch/Fedora; Debian: update-ca-certificates)
 ```
 
@@ -80,6 +80,16 @@ One identity for everything: Keycloak at `https://keycloak.notch.localhost` (rea
 | `<tenant>` (e.g. `team-alpha`) | `edit` in that namespace | read-only | Viewer |
 
 Add someone to a team by adding them to the Keycloak group; nothing in the cluster changes.
+
+There are three different passwords, one per login:
+
+| Login | Where | User | Password |
+|:--|:--|:--|:--|
+| Keycloak users (use this) | ArgoCD and Grafana: the **Keycloak** button, not the username/password form | `jabril`, `alice`, `bob` | `grep NOTCH_USER_PASSWORD ~/.config/notch/keycloak.env` |
+| ArgoCD break-glass | ArgoCD's username/password form (only accepts `admin`) | `admin` | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` |
+| Keycloak console | `https://keycloak.notch.localhost/admin` | `admin` | `grep KEYCLOAK_ADMIN_PASSWORD ~/.config/notch/keycloak.env` |
+
+ArgoCD is up minutes before the ingress and Keycloak are. To watch the first sync, `kubectl -n argocd port-forward svc/argocd-server 8090:80` and open `http://localhost:8090` as break-glass `admin` (the Keycloak button redirects to the ingress host, so it doesn't work there).
 
 ```bash
 notch tenant create team-alpha                 # pushes tenants/team-alpha/, writes team-alpha.kubeconfig
