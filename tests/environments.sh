@@ -59,7 +59,7 @@ grep_check "staging tracks main unless STAGING_REVISION says otherwise" 'STAGING
 grep_check "ArgoCD reaches staging over the kind network (--internal)" 'kind get kubeconfig --internal' scripts/kind-up.sh
 grep_check "staging gets dev's notch-secrets (ExternalSecret sources)" 'get secret.* -n notch-secrets|-n notch-secrets get secret' scripts/kind-up.sh
 
-for svc in hello demo; do
+for svc in demo; do
   check "$svc has a staging overlay on the staging host" \
     ".service.endpoints.internal.hosts == [\"$svc.staging.notch.localhost:8443\"]" "$(cat services/$svc/staging/values.yaml 2>/dev/null || echo '{}')"
 done

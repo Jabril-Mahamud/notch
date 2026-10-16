@@ -25,7 +25,7 @@ status:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: hello-staging
+  name: demo-staging
   namespace: argocd
 status:
   sync:
@@ -45,7 +45,7 @@ commands:
       kind get kubeconfig --name notch-staging > "$KC"
       S="--kubeconfig $KC"
       # Its own Postgres via the same NotchPostgres API, its own TLS from the shared CA.
-      kubectl $S -n hello wait --for=condition=Ready notchpostgres/hello --timeout=10s
-      curl -sf --cacert "$CA" https://hello.staging.notch.localhost:8443/ >/dev/null
+      kubectl $S -n demo wait --for=condition=Ready notchpostgres/demo --timeout=10s
+      curl -sf --cacert "$CA" https://demo.staging.notch.localhost:8443/ >/dev/null
       # Pulled from the shared registry: same image refs, no rebuild for staging.
-      kubectl $S -n hello get deploy hello -o jsonpath='{.spec.template.spec.containers[0].image}' | grep -q '^localhost:5001/hello:'
+      kubectl $S -n demo get deploy demo -o jsonpath='{.spec.template.spec.containers[0].image}' | grep -q '^localhost:5001/demo-'

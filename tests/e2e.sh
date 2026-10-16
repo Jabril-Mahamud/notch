@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Live kuttl suite: needs `notch up` and `notch up staging`, with hello deployed.
+# Live kuttl suite: needs `notch up` and `notch up staging`, with demo deployed.
 # Static checks live in the other tests/*.sh; this one talks to the cluster.
 cd "$(dirname "$0")/.."
 
